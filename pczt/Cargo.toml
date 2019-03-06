@@ -5,7 +5,19 @@ authors = ["Jack Grigg <jack@z.cash>"]
 edition = "2018"
 
 [dependencies]
+base64 = "0.10"
+bellman = { version = "0.6", path = "../bellman" }
+blake2b_simd = "0.5"
+failure = "0.1"
+ff = { version = "0.6", path = "../ff" }
+hex = "0.3"
+pairing = { version = "0.16", path = "../pairing" }
+pirate = "1.0"
 protobuf = "2"
+rand_core = "0.5.1"
+zcash_client_backend = { version = "0.2", path = "../zcash_client_backend" }
+zcash_primitives = { version = "0.2", path = "../zcash_primitives" }
+zcash_proofs = { version = "0.2", path = "../zcash_proofs" }
 
 [build-dependencies]
 protobuf-codegen-pure = "2.14"

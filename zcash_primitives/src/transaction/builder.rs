@@ -101,7 +101,7 @@ impl SaplingOutput {
         prover: &P,
         ctx: &mut P::SaplingProvingContext,
         rng: &mut R,
-    ) -> OutputDescription {
+    ) -> (OutputDescription, Fs) {
         let encryptor = SaplingNoteEncryption::new(
             self.ovk,
             self.note.clone(),
@@ -110,7 +110,7 @@ impl SaplingOutput {
             rng,
         );
 
-        let (zkproof, cv, _) = prover.output_proof(
+        let (zkproof, cv, rcv) = prover.output_proof(
             ctx,
             encryptor.esk().clone(),
             self.to,
@@ -125,14 +125,17 @@ impl SaplingOutput {
 
         let ephemeral_key = encryptor.epk().clone().into();
 
-        OutputDescription {
-            cv,
-            cmu,
-            ephemeral_key,
-            enc_ciphertext,
-            out_ciphertext,
-            zkproof,
-        }
+        (
+            OutputDescription {
+                cv,
+                cmu,
+                ephemeral_key,
+                enc_ciphertext,
+                out_ciphertext,
+                zkproof,
+            },
+            rcv,
+        )
     }
 }
 
@@ -558,7 +561,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
                 // Record the post-randomized output location
                 tx_metadata.output_indices[pos] = i;
 
-                output.build(prover, &mut ctx, &mut self.rng)
+                output.build(prover, &mut ctx, &mut self.rng).0
             } else {
                 // This is a dummy output
                 let (dummy_to, dummy_note) = {

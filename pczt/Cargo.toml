@@ -1,0 +1,11 @@
+[package]
+name = "pczt"
+version = "0.0.0"
+authors = ["Jack Grigg <jack@z.cash>"]
+edition = "2018"
+
+[dependencies]
+protobuf = "2"
+
+[build-dependencies]
+protobuf-codegen-pure = "2.14"

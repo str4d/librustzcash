@@ -23,6 +23,7 @@ pub mod constants;
 mod hashreader;
 pub mod sapling;
 pub mod sprout;
+pub mod zip304;
 
 #[cfg(any(feature = "local-prover", feature = "bundled-prover"))]
 #[cfg_attr(

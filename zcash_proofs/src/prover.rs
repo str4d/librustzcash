@@ -134,6 +134,16 @@ impl LocalTxProver {
             output_params: p.output_params,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn spend_params(&self) -> &Parameters<Bls12> {
+        &self.spend_params
+    }
+
+    #[cfg(test)]
+    pub(crate) fn spend_vk(&self) -> &PreparedVerifyingKey<Bls12> {
+        &self.spend_vk
+    }
 }
 
 impl TxProver for LocalTxProver {

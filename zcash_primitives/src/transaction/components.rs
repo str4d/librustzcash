@@ -6,6 +6,7 @@ use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use std::io::{self, Read, Write};
 
+use crate::extensions::transparent as tze;
 use crate::legacy::Script;
 use crate::redjubjub::{PublicKey, Signature};
 use crate::JUBJUB;
@@ -106,6 +107,51 @@ impl TxOut {
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         writer.write_all(&self.value.to_i64_le_bytes())?;
         self.script_pubkey.write(&mut writer)
+    }
+}
+
+#[derive(Debug)]
+pub struct TzeIn {
+    pub prevout: OutPoint,
+    pub witness: tze::Witness,
+}
+
+impl TzeIn {
+    pub fn read<R: Read>(mut reader: &mut R) -> io::Result<Self> {
+        let prevout = OutPoint::read(&mut reader)?;
+        let witness = tze::Witness::read(&mut reader)?;
+
+        Ok(TzeIn { prevout, witness })
+    }
+
+    pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        self.prevout.write(&mut writer)?;
+        self.witness.write(&mut writer)
+    }
+}
+
+#[derive(Debug)]
+pub struct TzeOut {
+    pub value: Amount,
+    pub predicate: tze::Predicate,
+}
+
+impl TzeOut {
+    pub fn read<R: Read>(mut reader: &mut R) -> io::Result<Self> {
+        let value = {
+            let mut tmp = [0; 8];
+            reader.read_exact(&mut tmp)?;
+            Amount::from_nonnegative_i64_le_bytes(tmp)
+        }
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "value out of range"))?;
+        let predicate = tze::Predicate::read(&mut reader)?;
+
+        Ok(TzeOut { value, predicate })
+    }
+
+    pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(&self.value.to_i64_le_bytes())?;
+        self.predicate.write(&mut writer)
     }
 }
 

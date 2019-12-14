@@ -7,6 +7,9 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
+mod builder;
+pub use builder::Builder;
+
 mod structured;
 pub use structured::{Payload, StructuredMemo};
 
@@ -35,6 +38,7 @@ where
 #[derive(Debug, PartialEq)]
 pub enum Error {
     InvalidEncoding,
+    InvalidPayload,
     InvalidUtf8(std::str::Utf8Error),
     TooLong(usize),
 }
@@ -43,6 +47,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::InvalidEncoding => write!(f, "Invalid memo encoding"),
+            Error::InvalidPayload => write!(f, "Invalid memo payload"),
             Error::InvalidUtf8(e) => write!(f, "Invalid UTF-8: {}", e),
             Error::TooLong(n) => write!(f, "Memo length {} is larger than maximum of 512", n),
         }
@@ -131,7 +136,7 @@ impl MemoBytes {
 }
 
 /// Type-safe wrapper around String to enforce memo length requirements.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextMemo(String);
 
 impl From<TextMemo> for String {
@@ -168,7 +173,7 @@ impl fmt::Debug for Memo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Memo::Empty => write!(f, "Memo::Empty"),
-            Memo::Text(memo) => write!(f, "Memo::Text(\"{}\")", memo.0),
+            Memo::Text(memo) => write!(f, "Memo::Text({:?})", memo),
             Memo::Structured(memo) => write!(f, "Memo::Structured({:?})", memo),
             Memo::Future(bytes) => write!(f, "Memo::Future({:0x})", bytes.0[0]),
             Memo::Arbitrary(bytes) => {

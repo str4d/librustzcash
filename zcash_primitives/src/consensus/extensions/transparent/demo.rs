@@ -19,23 +19,54 @@
 //! - `tx_c`: `[ TzeIn(tx_b, preimage_2) -> [any output types...] ]`
 
 use blake2b_simd::Params;
+use std::convert::TryFrom;
 
-use super::context;
-use crate::extensions::transparent::{demo, Predicate};
+use crate::extensions::transparent::{demo, Context, Extension};
+use crate::transaction::components::TzeOut;
 
-pub struct Program;
+pub trait DemoCtx {
+    fn block_height(&self) -> i32;
+    fn is_tze_only(&self) -> bool;
+    fn tx_tze_outputs(&self) -> &[TzeOut];
+}
 
-impl Program {
+impl<'a> DemoCtx for &Context<'a> {
+    fn block_height(&self) -> i32 {
+        self.height
+    }
+
+    fn is_tze_only(&self) -> bool {
+        self.tx.vin.is_empty()
+            && self.tx.vout.is_empty()
+            && self.tx.shielded_spends.is_empty()
+            && self.tx.shielded_outputs.is_empty()
+            && self.tx.joinsplits.is_empty()
+    }
+
+    fn tx_tze_outputs(&self) -> &[TzeOut] {
+        &self.tx.tze_outputs
+    }
+}
+
+pub struct Program<C: DemoCtx> {
+    pub ctx: C,
+}
+
+impl<C: DemoCtx> Extension for Program<C> {
+    type P = demo::Predicate;
+    type W = demo::Witness;
+    type Error = demo::Error;
+
     /// Runs the program against the given predicate, witness, and context.
     ///
     /// At this point the predicate and witness have been parsed and validated
     /// non-contextually, and are guaranteed to both be for this program. All subsequent
     /// validation is this function's responsibility.
-    pub(super) fn verify<'a>(
+    fn verify_inner(
+        &self,
         predicate: &demo::Predicate,
         witness: &demo::Witness,
-        ctx: &context::V1<'a>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), demo::Error> {
         // This match statement is selecting the mode that the program is operating in,
         // based on the enums defined in the parser.
         match (predicate, witness) {
@@ -45,16 +76,18 @@ impl Program {
                 // transaction contains both TZE inputs and TZE outputs, they must all be
                 // of the same program type. Therefore we only need to check that the
                 // transaction does not contain any other type of input or output.
-                if !ctx.is_tze_only() {
-                    return Err(
-                        "Demo TZE cannot be closed in a transaction with non-TZE inputs or outputs",
-                    );
+                if !self.ctx.is_tze_only() {
+                    return Err(demo::Error::NonTzeTxn);
                 }
 
                 // Next, check that there is only a single TZE output of the correct type.
-                match &ctx.tx_tze_outputs() {
-                    [tze_out] => match &tze_out.predicate {
-                        Predicate::Demo(demo::Predicate::Close(p_close)) => {
+                let outputs = &self.ctx.tx_tze_outputs();
+                match outputs {
+                    [tze_out] => match demo::Predicate::try_from((
+                        tze_out.predicate.mode,
+                        &tze_out.predicate.payload,
+                    )) {
+                        Ok(demo::Predicate::Close(p_close)) => {
                             // Finally, check the predicate:
                             // predicate_open = BLAKE2b_256(witness_open || predicate_close)
                             let mut h = Params::new().hash_length(32).to_state();
@@ -64,13 +97,13 @@ impl Program {
                             if hash.as_bytes() == p_open.0 {
                                 Ok(())
                             } else {
-                                Err("hash mismatch")
+                                Err(demo::Error::HashMismatch)
                             }
                         }
-                        Predicate::Demo(_) => Err("Invalid TZE output mode"),
-                        _ => Err("Invalid TZE output type"),
+                        Ok(demo::Predicate::Open(_)) => Err(demo::Error::ExpectedClose),
+                        Err(e) => Err(e),
                     },
-                    _ => Err("Invalid number of TZE outputs"),
+                    _ => Err(demo::Error::InvalidOutputQty(outputs.len())),
                 }
             }
             (demo::Predicate::Close(p), demo::Witness::Close(w)) => {
@@ -80,10 +113,10 @@ impl Program {
                 if hash.as_bytes() == p.0 {
                     Ok(())
                 } else {
-                    Err("hash mismatch")
+                    Err(demo::Error::HashMismatch)
                 }
             }
-            _ => Err("Mode mismatch"),
+            _ => Err(demo::Error::ModeMismatch),
         }
     }
 }

@@ -7,6 +7,7 @@
 //! [demo-rules]: crate::consensus::extensions::transparent::demo
 
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 
 use super::ToPayload;
 
@@ -46,8 +47,33 @@ impl Predicate {
     }
 }
 
+#[derive(Debug)]
+pub enum Error {
+    IllegalPayloadLength(usize),
+    ModeInvalid(usize),
+    NonTzeTxn,
+    HashMismatch, // include hashes?
+    ModeMismatch,
+    ExpectedClose,
+    InvalidOutputQty(usize),
+}
+
+impl fmt::Display for Error {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        match self {
+            Error::IllegalPayloadLength(sz) => write!(f, "Illegal payload length for demo: {}", sz),
+            Error::ModeInvalid(m) => write!(f, "Invalid TZE mode for demo program: {}", m),
+            Error::NonTzeTxn => write!(f, "Transaction has non-TZE inputs."),
+            Error::HashMismatch => write!(f, "Hash mismatch"),
+            Error::ModeMismatch => write!(f, "Extension operation mode mismatch."),
+            Error::ExpectedClose => write!(f, "Got open, expected close."),
+            Error::InvalidOutputQty(qty) => write!(f, "Incorrect number of outputs: {}", qty),
+        }
+    }
+}
+
 impl TryFrom<(usize, &[u8])> for Predicate {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from((mode, payload): (usize, &[u8])) -> Result<Self, Self::Error> {
         match mode {
@@ -57,7 +83,7 @@ impl TryFrom<(usize, &[u8])> for Predicate {
                     hash.copy_from_slice(&payload);
                     Ok(Predicate::Open(open::Predicate(hash)))
                 } else {
-                    Err("Payload is not 32 bytes")
+                    Err(Error::IllegalPayloadLength(payload.len()))
                 }
             }
             close::MODE => {
@@ -66,16 +92,16 @@ impl TryFrom<(usize, &[u8])> for Predicate {
                     hash.copy_from_slice(&payload);
                     Ok(Predicate::Close(close::Predicate(hash)))
                 } else {
-                    Err("Payload is not 32 bytes")
+                    Err(Error::IllegalPayloadLength(payload.len()))
                 }
             }
-            _ => Err("Invalid mode"),
+            _ => Err(Error::ModeInvalid(mode)),
         }
     }
 }
 
 impl TryFrom<(usize, &Vec<u8>)> for Predicate {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from((mode, payload): (usize, &Vec<u8>)) -> Result<Self, Self::Error> {
         (mode, &payload[..]).try_into()
@@ -83,13 +109,13 @@ impl TryFrom<(usize, &Vec<u8>)> for Predicate {
 }
 
 impl TryFrom<(usize, Predicate)> for Predicate {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from(from: (usize, Self)) -> Result<Self, Self::Error> {
         match from {
             (open::MODE, Predicate::Open(p)) => Ok(Predicate::Open(p)),
             (close::MODE, Predicate::Close(p)) => Ok(Predicate::Close(p)),
-            _ => Err("Invalid mode for predicate"),
+            _ => Err(Error::ModeInvalid(from.0)),
         }
     }
 }
@@ -120,7 +146,7 @@ impl Witness {
 }
 
 impl TryFrom<(usize, &[u8])> for Witness {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from((mode, payload): (usize, &[u8])) -> Result<Self, Self::Error> {
         match mode {
@@ -130,7 +156,7 @@ impl TryFrom<(usize, &[u8])> for Witness {
                     preimage.copy_from_slice(&payload);
                     Ok(Witness::Open(open::Witness(preimage)))
                 } else {
-                    Err("Payload is not 32 bytes")
+                    Err(Error::IllegalPayloadLength(payload.len()))
                 }
             }
             close::MODE => {
@@ -139,16 +165,16 @@ impl TryFrom<(usize, &[u8])> for Witness {
                     preimage.copy_from_slice(&payload);
                     Ok(Witness::Close(close::Witness(preimage)))
                 } else {
-                    Err("Payload is not 32 bytes")
+                    Err(Error::IllegalPayloadLength(payload.len()))
                 }
             }
-            _ => Err("Invalid mode"),
+            _ => Err(Error::ModeInvalid(mode)),
         }
     }
 }
 
 impl TryFrom<(usize, &Vec<u8>)> for Witness {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from((mode, payload): (usize, &Vec<u8>)) -> Result<Self, Self::Error> {
         (mode, &payload[..]).try_into()
@@ -156,13 +182,13 @@ impl TryFrom<(usize, &Vec<u8>)> for Witness {
 }
 
 impl TryFrom<(usize, Witness)> for Witness {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_from(from: (usize, Self)) -> Result<Self, Self::Error> {
         match from {
             (open::MODE, Witness::Open(p)) => Ok(Witness::Open(p)),
             (close::MODE, Witness::Close(p)) => Ok(Witness::Close(p)),
-            _ => Err("Invalid mode for witness"),
+            _ => Err(Error::ModeInvalid(from.0)),
         }
     }
 }

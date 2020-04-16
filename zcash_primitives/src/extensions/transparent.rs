@@ -1,10 +1,12 @@
 //! Core traits and structs for Transparent Zcash Extensions.
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use std::convert::TryInto;
+use std::convert::TryFrom;
+use std::fmt;
 use std::io::{self, Read, Write};
 
 use crate::serialize::{CompactSize, Vector};
+use crate::transaction::Transaction;
 
 pub(crate) mod demo;
 
@@ -14,6 +16,7 @@ pub trait ToPayload {
 }
 
 /// The set of programs that have assigned type IDs within the Zcash ecosystem.
+#[derive(Debug, Clone, Copy)]
 pub enum ProgramType {
     Demo,
     Unknown(usize),
@@ -39,16 +42,10 @@ impl From<ProgramType> for usize {
 
 /// A condition that can be used to encumber transparent funds.
 #[derive(Debug)]
-pub enum Predicate {
-    Demo(demo::Predicate),
-    /// A predicate for an unknown program type. This allows the current parser to parse
-    /// future transactions containing new program types, while ensuring that they cannot
-    /// be considered valid.
-    Unknown {
-        type_id: usize,
-        mode: usize,
-        payload: Vec<u8>,
-    },
+pub struct Predicate {
+    pub type_id: ProgramType,
+    pub mode: usize,
+    pub payload: Vec<u8>,
 }
 
 impl Predicate {
@@ -57,54 +54,26 @@ impl Predicate {
         let mode = CompactSize::read(&mut reader)?;
         let payload = Vector::read(&mut reader, |r| r.read_u8())?;
 
-        match type_id.into() {
-            ProgramType::Demo => {
-                let predicate = (mode, &payload)
-                    .try_into()
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                Ok(Predicate::Demo(predicate))
-            }
-            ProgramType::Unknown(type_id) => Ok(Predicate::Unknown {
-                type_id,
-                mode,
-                payload,
-            }),
-        }
+        Ok(Predicate {
+            type_id: type_id.into(),
+            mode,
+            payload,
+        })
     }
 
-    pub fn write<W: Write>(&self, writer: W) -> io::Result<()> {
-        let inner = |mut w: W, type_id: ProgramType, mode, payload| {
-            CompactSize::write(&mut w, type_id.into())?;
-            CompactSize::write(&mut w, mode)?;
-            Vector::write(&mut w, payload, |w, b| w.write_u8(*b))
-        };
-
-        match self {
-            Predicate::Demo(w) => {
-                let (mode, payload) = w.to_payload();
-                inner(writer, ProgramType::Demo, mode, &payload)
-            }
-            Predicate::Unknown {
-                type_id,
-                mode,
-                payload,
-            } => inner(writer, ProgramType::Unknown(*type_id), *mode, payload),
-        }
+    pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        CompactSize::write(&mut writer, self.type_id.into())?;
+        CompactSize::write(&mut writer, self.mode)?;
+        Vector::write(&mut writer, &self.payload, |w, b| w.write_u8(*b))
     }
 }
 
 /// Data that satisfies the program for prior encumbered funds, enabling them to be spent.
 #[derive(Debug)]
-pub enum Witness {
-    Demo(demo::Witness),
-    /// A witness for an unknown program type. This allows the current parser to parse
-    /// future transactions containing new program types, while ensuring that they cannot
-    /// be considered valid.
-    Unknown {
-        type_id: usize,
-        mode: usize,
-        payload: Vec<u8>,
-    },
+pub struct Witness {
+    pub type_id: ProgramType,
+    pub mode: usize,
+    pub payload: Vec<u8>,
 }
 
 impl Witness {
@@ -113,38 +82,71 @@ impl Witness {
         let mode = CompactSize::read(&mut reader)?;
         let payload = Vector::read(&mut reader, |r| r.read_u8())?;
 
-        match type_id.into() {
-            ProgramType::Demo => {
-                let witness = (mode, &payload)
-                    .try_into()
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                Ok(Witness::Demo(witness))
-            }
-            ProgramType::Unknown(type_id) => Ok(Witness::Unknown {
-                type_id,
-                mode,
-                payload,
-            }),
-        }
+        Ok(Witness {
+            type_id: type_id.into(),
+            mode,
+            payload,
+        })
     }
 
-    pub fn write<W: Write>(&self, writer: W) -> io::Result<()> {
-        let inner = |mut w: W, type_id: ProgramType, mode, payload| {
-            CompactSize::write(&mut w, type_id.into())?;
-            CompactSize::write(&mut w, mode)?;
-            Vector::write(&mut w, payload, |w, b| w.write_u8(*b))
-        };
+    pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        CompactSize::write(&mut writer, self.type_id.into())?;
+        CompactSize::write(&mut writer, self.mode)?;
+        Vector::write(&mut writer, &self.payload, |w, b| w.write_u8(*b))
+    }
+}
 
+#[derive(Debug, PartialEq)]
+pub enum ExtErr<E: fmt::Display> {
+    InvalidEpoch,
+    TypeMismatch,
+    Program(E),
+}
+
+impl<E: fmt::Display> fmt::Display for ExtErr<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Witness::Demo(w) => {
-                let (mode, payload) = w.to_payload();
-                inner(writer, ProgramType::Demo, mode, &payload)
-            }
-            Witness::Unknown {
-                type_id,
-                mode,
-                payload,
-            } => inner(writer, ProgramType::Unknown(*type_id), *mode, payload),
+            ExtErr::InvalidEpoch => write!(f, "Program type is invalid for this epoch"),
+            ExtErr::TypeMismatch => write!(f, "Predicate and witness types do not match"),
+            ExtErr::Program(err) => write!(f, "Program error: {}", err),
         }
     }
+}
+
+pub trait Extension {
+    type P;
+    type W;
+    type Error: fmt::Display;
+
+    fn verify_inner(&self, predicate: &Self::P, witness: &Self::W) -> Result<(), Self::Error>;
+
+    fn verify<'a>(&self, predicate: &'a Predicate, witness: &'a Witness) -> Result<(), Self::Error>
+    where
+        Self::P: TryFrom<(usize, &'a [u8]), Error = Self::Error>,
+        Self::W: TryFrom<(usize, &'a [u8]), Error = Self::Error>,
+    {
+        let p0 = Self::P::try_from((predicate.mode, &predicate.payload))?;
+        let w0 = Self::W::try_from((witness.mode, &witness.payload))?;
+        self.verify_inner(&p0, &w0)
+    }
+}
+
+pub struct Context<'a> {
+    pub height: i32,
+    pub tx: &'a Transaction,
+}
+
+impl<'a> Context<'a> {
+    fn new(height: i32, tx: &'a Transaction) -> Self {
+        Context { height, tx }
+    }
+}
+
+pub trait Epoch<E: fmt::Display> {
+    fn verify<'a>(
+        &self,
+        predicate: &Predicate,
+        witness: &Witness,
+        ctx: &Context<'a>,
+    ) -> Result<(), ExtErr<E>>;
 }

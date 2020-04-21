@@ -21,38 +21,20 @@
 use blake2b_simd::Params;
 use std::convert::TryFrom;
 
-use crate::extensions::transparent::{demo, Context, Extension};
+use crate::extensions::transparent::{demo, Extension};
 use crate::transaction::components::TzeOut;
 
-pub trait DemoCtx {
+pub trait Context {
     fn block_height(&self) -> i32;
     fn is_tze_only(&self) -> bool;
     fn tx_tze_outputs(&self) -> &[TzeOut];
 }
 
-impl<'a> DemoCtx for &Context<'a> {
-    fn block_height(&self) -> i32 {
-        self.height
-    }
-
-    fn is_tze_only(&self) -> bool {
-        self.tx.vin.is_empty()
-            && self.tx.vout.is_empty()
-            && self.tx.shielded_spends.is_empty()
-            && self.tx.shielded_outputs.is_empty()
-            && self.tx.joinsplits.is_empty()
-    }
-
-    fn tx_tze_outputs(&self) -> &[TzeOut] {
-        &self.tx.tze_outputs
-    }
-}
-
-pub struct Program<C: DemoCtx> {
+pub struct Program<C: Context> {
     pub ctx: C,
 }
 
-impl<C: DemoCtx> Extension for Program<C> {
+impl<C: Context> Extension for Program<C> {
     type P = demo::Predicate;
     type W = demo::Witness;
     type Error = demo::Error;
@@ -124,7 +106,7 @@ impl<C: DemoCtx> Extension for Program<C> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        consensus::extensions::transparent::{Context, Programs},
+        consensus::extensions::transparent::{Programs},
         extensions::transparent::{self as tze, demo},
         transaction::{
             components::{Amount, OutPoint, TzeIn, TzeOut},

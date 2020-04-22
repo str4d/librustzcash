@@ -104,21 +104,22 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
     }
 }
 
-pub trait Extension {
+pub trait Extension<C> {
     type P;
     type W;
     type Error;
 
-    fn verify_inner(&self, predicate: &Self::P, witness: &Self::W) -> Result<(), Self::Error>;
+    fn verify_inner(&self, predicate: &Self::P, witness: &Self::W, context: &C) -> Result<(), Self::Error>;
 
-    fn verify<'a>(&self, predicate: &'a Predicate, witness: &'a Witness) -> Result<(), Self::Error>
+    // TODO: is the lifetime specifier here actually necessary?
+    fn verify<'a>(&self, predicate: &'a Predicate, witness: &'a Witness, context: &C) -> Result<(), Self::Error>
     where
         Self::P: TryFrom<(usize, &'a [u8]), Error = Self::Error>,
         Self::W: TryFrom<(usize, &'a [u8]), Error = Self::Error>,
     {
         let p0 = Self::P::try_from((predicate.mode, &predicate.payload))?;
         let w0 = Self::W::try_from((witness.mode, &witness.payload))?;
-        self.verify_inner(&p0, &w0)
+        self.verify_inner(&p0, &w0, &context)
     }
 }
 

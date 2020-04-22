@@ -25,16 +25,13 @@ use crate::extensions::transparent::{demo, Extension};
 use crate::transaction::components::TzeOut;
 
 pub trait Context {
-    fn block_height(&self) -> i32;
     fn is_tze_only(&self) -> bool;
     fn tx_tze_outputs(&self) -> &[TzeOut];
 }
 
-pub struct Program<C: Context> {
-    pub ctx: C,
-}
+pub struct Program;
 
-impl<C: Context> Extension for Program<C> {
+impl<C: Context> Extension<C> for Program {
     type P = demo::Predicate;
     type W = demo::Witness;
     type Error = demo::Error;
@@ -48,6 +45,7 @@ impl<C: Context> Extension for Program<C> {
         &self,
         predicate: &demo::Predicate,
         witness: &demo::Witness,
+        context: &C
     ) -> Result<(), demo::Error> {
         // This match statement is selecting the mode that the program is operating in,
         // based on the enums defined in the parser.
@@ -58,12 +56,12 @@ impl<C: Context> Extension for Program<C> {
                 // transaction contains both TZE inputs and TZE outputs, they must all be
                 // of the same program type. Therefore we only need to check that the
                 // transaction does not contain any other type of input or output.
-                if !self.ctx.is_tze_only() {
+                if !context.is_tze_only() {
                     return Err(demo::Error::NonTzeTxn);
                 }
 
                 // Next, check that there is only a single TZE output of the correct type.
-                let outputs = &self.ctx.tx_tze_outputs();
+                let outputs = context.tx_tze_outputs();
                 match outputs {
                     [tze_out] => match demo::Predicate::try_from((
                         tze_out.predicate.mode,
@@ -116,19 +114,14 @@ mod tests {
     };
     use blake2b_simd::Params;
 
-    /// Dummy context (incidentally contains the same information as the real context)
+    /// Dummy context 
     pub struct Ctx<'a> {
-        pub height: i32,
         pub tx: &'a Transaction,
     }
 
     /// Implementation of required operations for the demo extension, as satisfied
     /// by the context.
     impl<'a> Context for Ctx<'a> {
-        fn block_height(&self) -> i32 {
-            self.height
-        }
-
         fn is_tze_only(&self) -> bool {
             self.tx.vin.is_empty()
                 && self.tx.vout.is_empty()
@@ -194,12 +187,12 @@ mod tests {
 
         // Verify tx_b
         {
-            let ctx = Ctx { height: 1, tx: &tx_b };
-            let program = Program { ctx };
+            let ctx = Ctx { tx: &tx_b };
             assert_eq!(
-                program.verify(
+                Program.verify(
                     &tx_a.tze_outputs[0].predicate,
-                    &tx_b.tze_inputs[0].witness
+                    &tx_b.tze_inputs[0].witness,
+                    &ctx
                 ),
                 Ok(())
             );
@@ -207,12 +200,12 @@ mod tests {
 
         // Verify tx_c
         {
-            let ctx = Ctx { height: 1, tx: &tx_b };
-            let program = Program { ctx };
+            let ctx = Ctx { tx: &tx_b };
             assert_eq!(
-                program.verify(
+                Program.verify(
                     &tx_b.tze_outputs[0].predicate,
-                    &tx_c.tze_inputs[0].witness
+                    &tx_c.tze_inputs[0].witness,
+                    &ctx
                 ),
                 Ok(())
             );

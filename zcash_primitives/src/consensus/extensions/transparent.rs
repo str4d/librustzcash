@@ -37,11 +37,7 @@ impl From<ExtensionId> for usize {
 
 /// Implementation of required operations for the demo extension, as satisfied
 /// by the context.
-impl<'a> demo::Context for &Context<'a> {
-    fn block_height(&self) -> i32 {
-        self.height
-    }
-
+impl<'a> demo::Context for Context<'a> {
     fn is_tze_only(&self) -> bool {
         self.tx.vin.is_empty()
             && self.tx.vout.is_empty()
@@ -74,9 +70,8 @@ impl Epoch for EpochV1 {
         let ext_id = ExtensionId::try_from(predicate.extension_id).map_err(|InvalidExtId(id)| Error::InvalidExtensionId(id))?;
         match ext_id {
             ExtensionId::Demo => {
-                let program = demo::Program { ctx };
-                program
-                    .verify(predicate, witness)
+                demo::Program
+                    .verify(predicate, witness, ctx)
                     .map_err(|e| Error::ProgramError(format!("Epoch v1 program error: {}", e)))
             }
         }

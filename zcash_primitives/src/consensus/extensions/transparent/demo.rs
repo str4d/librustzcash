@@ -106,14 +106,41 @@ impl<C: Context> Extension for Program<C> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        consensus::extensions::transparent::{Programs},
-        extensions::transparent::{self as tze, demo},
+        extensions::transparent::{self as tze, demo, Extension},
         transaction::{
             components::{Amount, OutPoint, TzeIn, TzeOut},
+            Transaction,
             TransactionData,
         },
+        consensus::extensions::transparent::demo::{Context, Program}
     };
     use blake2b_simd::Params;
+
+    /// Dummy context (incidentally contains the same information as the real context)
+    pub struct Ctx<'a> {
+        pub height: i32,
+        pub tx: &'a Transaction,
+    }
+
+    /// Implementation of required operations for the demo extension, as satisfied
+    /// by the context.
+    impl<'a> Context for Ctx<'a> {
+        fn block_height(&self) -> i32 {
+            self.height
+        }
+
+        fn is_tze_only(&self) -> bool {
+            self.tx.vin.is_empty()
+                && self.tx.vout.is_empty()
+                && self.tx.shielded_spends.is_empty()
+                && self.tx.shielded_outputs.is_empty()
+                && self.tx.joinsplits.is_empty()
+        }
+
+        fn tx_tze_outputs(&self) -> &[TzeOut] {
+            &self.tx.tze_outputs
+        }
+    }
 
     #[test]
     fn demo_program() {
@@ -125,6 +152,7 @@ mod tests {
             hash.copy_from_slice(Params::new().hash_length(32).hash(&preimage_2).as_bytes());
             hash
         };
+
         let hash_1 = {
             let mut hash = [0; 32];
             hash.copy_from_slice(
@@ -142,38 +170,36 @@ mod tests {
         let mut mtx_a = TransactionData::nu4();
         mtx_a.tze_outputs.push(TzeOut {
             value: Amount::from_u64(1).unwrap(),
-            predicate: tze::Predicate::Demo(demo::Predicate::open(hash_1)),
+            predicate: tze::Predicate::from(0, &demo::Predicate::open(hash_1)),
         });
         let tx_a = mtx_a.freeze().unwrap();
 
         let mut mtx_b = TransactionData::nu4();
         mtx_b.tze_inputs.push(TzeIn {
             prevout: OutPoint::new(tx_a.txid().0, 0),
-            witness: tze::Witness::Demo(demo::Witness::open(preimage_1)),
+            witness: tze::Witness::from(0, &demo::Witness::open(preimage_1)),
         });
         mtx_b.tze_outputs.push(TzeOut {
             value: Amount::from_u64(1).unwrap(),
-            predicate: tze::Predicate::Demo(demo::Predicate::close(hash_2)),
+            predicate: tze::Predicate::from(0, &demo::Predicate::close(hash_2)),
         });
         let tx_b = mtx_b.freeze().unwrap();
 
         let mut mtx_c = TransactionData::nu4();
         mtx_c.tze_inputs.push(TzeIn {
             prevout: OutPoint::new(tx_b.txid().0, 0),
-            witness: tze::Witness::Demo(demo::Witness::close(preimage_2)),
+            witness: tze::Witness::from(0, &demo::Witness::close(preimage_2)),
         });
         let tx_c = mtx_c.freeze().unwrap();
 
-        let programs = Programs::for_epoch(0x7473_6554).unwrap();
-
         // Verify tx_b
         {
-            let ctx = Context::v1(1, &tx_b);
+            let ctx = Ctx { height: 1, tx: &tx_b };
+            let program = Program { ctx };
             assert_eq!(
-                programs.verify(
+                program.verify(
                     &tx_a.tze_outputs[0].predicate,
-                    &tx_b.tze_inputs[0].witness,
-                    &ctx
+                    &tx_b.tze_inputs[0].witness
                 ),
                 Ok(())
             );
@@ -181,12 +207,12 @@ mod tests {
 
         // Verify tx_c
         {
-            let ctx = Context::v1(2, &tx_c);
+            let ctx = Ctx { height: 1, tx: &tx_b };
+            let program = Program { ctx };
             assert_eq!(
-                programs.verify(
+                program.verify(
                     &tx_b.tze_outputs[0].predicate,
-                    &tx_c.tze_inputs[0].witness,
-                    &ctx
+                    &tx_c.tze_inputs[0].witness
                 ),
                 Ok(())
             );

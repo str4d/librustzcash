@@ -75,6 +75,11 @@ impl Witness {
         CompactSize::write(&mut writer, self.mode)?;
         Vector::write(&mut writer, &self.payload, |w, b| w.write_u8(*b))
     }
+
+    pub fn from<P: ToPayload>(extension_id: usize, value: &P) -> Witness {
+        let (mode, payload) = value.to_payload();
+        Witness { extension_id, mode, payload }
+    }
 }
 
 #[derive(Debug, PartialEq)]

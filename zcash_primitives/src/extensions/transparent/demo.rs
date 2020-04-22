@@ -47,7 +47,7 @@ impl Predicate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     IllegalPayloadLength(usize),
     ModeInvalid(usize),

@@ -29,7 +29,6 @@ impl Predicate {
         let mode = CompactSize::read(&mut reader)?;
         let payload = Vector::read(&mut reader, |r| r.read_u8())?;
 
-
         Ok(Predicate {
             extension_id,
             mode,
@@ -45,7 +44,11 @@ impl Predicate {
 
     pub fn from<P: ToPayload>(extension_id: usize, value: &P) -> Predicate {
         let (mode, payload) = value.to_payload();
-        Predicate { extension_id, mode, payload }
+        Predicate {
+            extension_id,
+            mode,
+            payload,
+        }
     }
 }
 
@@ -78,7 +81,11 @@ impl Witness {
 
     pub fn from<P: ToPayload>(extension_id: usize, value: &P) -> Witness {
         let (mode, payload) = value.to_payload();
-        Witness { extension_id, mode, payload }
+        Witness {
+            extension_id,
+            mode,
+            payload,
+        }
     }
 }
 
@@ -92,14 +99,17 @@ pub enum Error<E> {
 impl<E: fmt::Display> fmt::Display for Error<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::InvalidForEpoch(cid, ptype) => 
-                write!(f, "Program type {} is invalid for consensus branch id {}", ptype, cid),
+            Error::InvalidForEpoch(cid, ptype) => write!(
+                f,
+                "Program type {} is invalid for consensus branch id {}",
+                ptype, cid
+            ),
 
-            Error::InvalidExtensionId(extension_id) => 
-                write!(f, "Unrecognized program type id {}", extension_id),
+            Error::InvalidExtensionId(extension_id) => {
+                write!(f, "Unrecognized program type id {}", extension_id)
+            }
 
-            Error::ProgramError(err) => 
-                write!(f, "Program error: {}", err),
+            Error::ProgramError(err) => write!(f, "Program error: {}", err),
         }
     }
 }
@@ -109,10 +119,20 @@ pub trait Extension<C> {
     type W;
     type Error;
 
-    fn verify_inner(&self, predicate: &Self::P, witness: &Self::W, context: &C) -> Result<(), Self::Error>;
+    fn verify_inner(
+        &self,
+        predicate: &Self::P,
+        witness: &Self::W,
+        context: &C,
+    ) -> Result<(), Self::Error>;
 
     // TODO: is the lifetime specifier here actually necessary?
-    fn verify<'a>(&self, predicate: &'a Predicate, witness: &'a Witness, context: &C) -> Result<(), Self::Error>
+    fn verify<'a>(
+        &self,
+        predicate: &'a Predicate,
+        witness: &'a Witness,
+        context: &C,
+    ) -> Result<(), Self::Error>
     where
         Self::P: TryFrom<(usize, &'a [u8]), Error = Self::Error>,
         Self::W: TryFrom<(usize, &'a [u8]), Error = Self::Error>,

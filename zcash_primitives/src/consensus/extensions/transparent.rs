@@ -1,10 +1,8 @@
 //! Consensus logic for Transparent Zcash Extensions.
 
+use crate::extensions::transparent::{Context, Epoch, Error, Extension, Predicate, Witness};
+use crate::transaction::components::TzeOut;
 use std::convert::TryFrom;
-use crate::extensions::transparent::{
-    Context, Epoch, Error, Extension, Predicate, Witness,
-};
-use crate::transaction::components::{ TzeOut };
 
 mod demo;
 
@@ -67,13 +65,12 @@ impl Epoch for EpochV1 {
         ctx: &Context<'a>,
     ) -> Result<(), Error<Self::Error>> {
         // This epoch contains the following set of programs:
-        let ext_id = ExtensionId::try_from(predicate.extension_id).map_err(|InvalidExtId(id)| Error::InvalidExtensionId(id))?;
+        let ext_id = ExtensionId::try_from(predicate.extension_id)
+            .map_err(|InvalidExtId(id)| Error::InvalidExtensionId(id))?;
         match ext_id {
-            ExtensionId::Demo => {
-                demo::Program
-                    .verify(predicate, witness, ctx)
-                    .map_err(|e| Error::ProgramError(format!("Epoch v1 program error: {}", e)))
-            }
+            ExtensionId::Demo => demo::Program
+                .verify(predicate, witness, ctx)
+                .map_err(|e| Error::ProgramError(format!("Epoch v1 program error: {}", e))),
         }
     }
 }

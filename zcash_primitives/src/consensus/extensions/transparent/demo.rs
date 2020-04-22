@@ -45,7 +45,7 @@ impl<C: Context> Extension<C> for Program {
         &self,
         predicate: &demo::Predicate,
         witness: &demo::Witness,
-        context: &C
+        context: &C,
     ) -> Result<(), demo::Error> {
         // This match statement is selecting the mode that the program is operating in,
         // based on the enums defined in the parser.
@@ -104,17 +104,16 @@ impl<C: Context> Extension<C> for Program {
 #[cfg(test)]
 mod tests {
     use crate::{
+        consensus::extensions::transparent::demo::{Context, Program},
         extensions::transparent::{self as tze, demo, Extension},
         transaction::{
             components::{Amount, OutPoint, TzeIn, TzeOut},
-            Transaction,
-            TransactionData,
+            Transaction, TransactionData,
         },
-        consensus::extensions::transparent::demo::{Context, Program}
     };
     use blake2b_simd::Params;
 
-    /// Dummy context 
+    /// Dummy context
     pub struct Ctx<'a> {
         pub tx: &'a Transaction,
     }

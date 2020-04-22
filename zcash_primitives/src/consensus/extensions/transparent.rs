@@ -1,6 +1,7 @@
 //! Consensus logic for Transparent Zcash Extensions.
 
-use crate::extensions::transparent::{Context, Epoch, Error, Extension, Predicate, Witness};
+use crate::extensions::transparent::{Error, Extension, Predicate, Witness};
+use crate::transaction::Transaction;
 use crate::transaction::components::TzeOut;
 use std::convert::TryFrom;
 
@@ -31,6 +32,30 @@ impl From<ExtensionId> for usize {
             ExtensionId::Demo => 0,
         }
     }
+}
+
+/// The complete set of context data that is available to any extension having
+/// an assigned extension type ID.
+pub struct Context<'a> {
+    pub height: i32,
+    pub tx: &'a Transaction,
+}
+
+impl<'a> Context<'a> {
+    pub fn new(height: i32, tx: &'a Transaction) -> Self {
+        Context { height, tx }
+    }
+}
+
+pub trait Epoch {
+    type Error;
+
+    fn verify<'a>(
+        &self,
+        predicate: &Predicate,
+        witness: &Witness,
+        ctx: &Context<'a>,
+    ) -> Result<(), Error<Self::Error>>;
 }
 
 /// Implementation of required operations for the demo extension, as satisfied

@@ -6,9 +6,6 @@ use std::fmt;
 use std::io::{self, Read, Write};
 
 use crate::serialize::{CompactSize, Vector};
-use crate::transaction::Transaction;
-
-pub mod demo;
 
 pub trait ToPayload {
     /// Returns a serialized payload and its corresponding mode.
@@ -143,26 +140,3 @@ pub trait Extension<C> {
     }
 }
 
-/// The complete set of context data that is available to any extension having
-/// an assigned extension type ID.
-pub struct Context<'a> {
-    pub height: i32,
-    pub tx: &'a Transaction,
-}
-
-impl<'a> Context<'a> {
-    pub fn new(height: i32, tx: &'a Transaction) -> Self {
-        Context { height, tx }
-    }
-}
-
-pub trait Epoch {
-    type Error;
-
-    fn verify<'a>(
-        &self,
-        predicate: &Predicate,
-        witness: &Witness,
-        ctx: &Context<'a>,
-    ) -> Result<(), Error<Self::Error>>;
-}

@@ -19,10 +19,203 @@
 //! - `tx_c`: `[ TzeIn(tx_b, preimage_2) -> [any output types...] ]`
 
 use blake2b_simd::Params;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
+use std::fmt;
 
-use crate::extensions::transparent::{demo, Extension};
+
+use crate::extensions::transparent::{Extension, ToPayload};
 use crate::transaction::components::TzeOut;
+
+mod open {
+    pub const MODE: usize = 0;
+
+    #[derive(Debug, PartialEq)]
+    pub struct Predicate(pub [u8; 32]);
+
+    #[derive(Debug, PartialEq)]
+    pub struct Witness(pub [u8; 32]);
+}
+
+mod close {
+    pub const MODE: usize = 1;
+
+    #[derive(Debug, PartialEq)]
+    pub struct Predicate(pub [u8; 32]);
+
+    #[derive(Debug, PartialEq)]
+    pub struct Witness(pub [u8; 32]);
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Predicate {
+    Open(open::Predicate),
+    Close(close::Predicate),
+}
+
+impl Predicate {
+    pub fn open(hash: [u8; 32]) -> Self {
+        Predicate::Open(open::Predicate(hash))
+    }
+
+    pub fn close(hash: [u8; 32]) -> Self {
+        Predicate::Close(close::Predicate(hash))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    IllegalPayloadLength(usize),
+    ModeInvalid(usize),
+    NonTzeTxn,
+    HashMismatch, // include hashes?
+    ModeMismatch,
+    ExpectedClose,
+    InvalidOutputQty(usize),
+}
+
+impl fmt::Display for Error {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        match self {
+            Error::IllegalPayloadLength(sz) => write!(f, "Illegal payload length for demo: {}", sz),
+            Error::ModeInvalid(m) => write!(f, "Invalid TZE mode for demo program: {}", m),
+            Error::NonTzeTxn => write!(f, "Transaction has non-TZE inputs."),
+            Error::HashMismatch => write!(f, "Hash mismatch"),
+            Error::ModeMismatch => write!(f, "Extension operation mode mismatch."),
+            Error::ExpectedClose => write!(f, "Got open, expected close."),
+            Error::InvalidOutputQty(qty) => write!(f, "Incorrect number of outputs: {}", qty),
+        }
+    }
+}
+
+impl TryFrom<(usize, &[u8])> for Predicate {
+    type Error = Error;
+
+    fn try_from((mode, payload): (usize, &[u8])) -> Result<Self, Self::Error> {
+        match mode {
+            open::MODE => {
+                if payload.len() == 32 {
+                    let mut hash = [0; 32];
+                    hash.copy_from_slice(&payload);
+                    Ok(Predicate::Open(open::Predicate(hash)))
+                } else {
+                    Err(Error::IllegalPayloadLength(payload.len()))
+                }
+            }
+            close::MODE => {
+                if payload.len() == 32 {
+                    let mut hash = [0; 32];
+                    hash.copy_from_slice(&payload);
+                    Ok(Predicate::Close(close::Predicate(hash)))
+                } else {
+                    Err(Error::IllegalPayloadLength(payload.len()))
+                }
+            }
+            _ => Err(Error::ModeInvalid(mode)),
+        }
+    }
+}
+
+impl TryFrom<(usize, &Vec<u8>)> for Predicate {
+    type Error = Error;
+
+    fn try_from((mode, payload): (usize, &Vec<u8>)) -> Result<Self, Self::Error> {
+        (mode, &payload[..]).try_into()
+    }
+}
+
+impl TryFrom<(usize, Predicate)> for Predicate {
+    type Error = Error;
+
+    fn try_from(from: (usize, Self)) -> Result<Self, Self::Error> {
+        match from {
+            (open::MODE, Predicate::Open(p)) => Ok(Predicate::Open(p)),
+            (close::MODE, Predicate::Close(p)) => Ok(Predicate::Close(p)),
+            _ => Err(Error::ModeInvalid(from.0)),
+        }
+    }
+}
+
+impl ToPayload for Predicate {
+    fn to_payload(&self) -> (usize, Vec<u8>) {
+        match self {
+            Predicate::Open(p) => (open::MODE, p.0.to_vec()),
+            Predicate::Close(p) => (close::MODE, p.0.to_vec()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Witness {
+    Open(open::Witness),
+    Close(close::Witness),
+}
+
+impl Witness {
+    pub fn open(preimage: [u8; 32]) -> Self {
+        Witness::Open(open::Witness(preimage))
+    }
+
+    pub fn close(preimage: [u8; 32]) -> Self {
+        Witness::Close(close::Witness(preimage))
+    }
+}
+
+impl TryFrom<(usize, &[u8])> for Witness {
+    type Error = Error;
+
+    fn try_from((mode, payload): (usize, &[u8])) -> Result<Self, Self::Error> {
+        match mode {
+            open::MODE => {
+                if payload.len() == 32 {
+                    let mut preimage = [0; 32];
+                    preimage.copy_from_slice(&payload);
+                    Ok(Witness::Open(open::Witness(preimage)))
+                } else {
+                    Err(Error::IllegalPayloadLength(payload.len()))
+                }
+            }
+            close::MODE => {
+                if payload.len() == 32 {
+                    let mut preimage = [0; 32];
+                    preimage.copy_from_slice(&payload);
+                    Ok(Witness::Close(close::Witness(preimage)))
+                } else {
+                    Err(Error::IllegalPayloadLength(payload.len()))
+                }
+            }
+            _ => Err(Error::ModeInvalid(mode)),
+        }
+    }
+}
+
+impl TryFrom<(usize, &Vec<u8>)> for Witness {
+    type Error = Error;
+
+    fn try_from((mode, payload): (usize, &Vec<u8>)) -> Result<Self, Self::Error> {
+        (mode, &payload[..]).try_into()
+    }
+}
+
+impl TryFrom<(usize, Witness)> for Witness {
+    type Error = Error;
+
+    fn try_from(from: (usize, Self)) -> Result<Self, Self::Error> {
+        match from {
+            (open::MODE, Witness::Open(p)) => Ok(Witness::Open(p)),
+            (close::MODE, Witness::Close(p)) => Ok(Witness::Close(p)),
+            _ => Err(Error::ModeInvalid(from.0)),
+        }
+    }
+}
+
+impl ToPayload for Witness {
+    fn to_payload(&self) -> (usize, Vec<u8>) {
+        match self {
+            Witness::Open(w) => (open::MODE, w.0.to_vec()),
+            Witness::Close(w) => (close::MODE, w.0.to_vec()),
+        }
+    }
+}
 
 pub trait Context {
     fn is_tze_only(&self) -> bool;
@@ -32,9 +225,9 @@ pub trait Context {
 pub struct Program;
 
 impl<C: Context> Extension<C> for Program {
-    type P = demo::Predicate;
-    type W = demo::Witness;
-    type Error = demo::Error;
+    type P = Predicate;
+    type W = Witness;
+    type Error = Error;
 
     /// Runs the program against the given predicate, witness, and context.
     ///
@@ -43,31 +236,31 @@ impl<C: Context> Extension<C> for Program {
     /// validation is this function's responsibility.
     fn verify_inner(
         &self,
-        predicate: &demo::Predicate,
-        witness: &demo::Witness,
+        predicate: &Predicate,
+        witness: &Witness,
         context: &C,
-    ) -> Result<(), demo::Error> {
+    ) -> Result<(), Error> {
         // This match statement is selecting the mode that the program is operating in,
         // based on the enums defined in the parser.
         match (predicate, witness) {
-            (demo::Predicate::Open(p_open), demo::Witness::Open(w_open)) => {
+            (Predicate::Open(p_open), Witness::Open(w_open)) => {
                 // In OPEN mode, we enforce that the transaction must only contain inputs
                 // and outputs from this program. The consensus rules enforce that if a
                 // transaction contains both TZE inputs and TZE outputs, they must all be
                 // of the same program type. Therefore we only need to check that the
                 // transaction does not contain any other type of input or output.
                 if !context.is_tze_only() {
-                    return Err(demo::Error::NonTzeTxn);
+                    return Err(Error::NonTzeTxn);
                 }
 
                 // Next, check that there is only a single TZE output of the correct type.
                 let outputs = context.tx_tze_outputs();
                 match outputs {
-                    [tze_out] => match demo::Predicate::try_from((
+                    [tze_out] => match Predicate::try_from((
                         tze_out.predicate.mode,
                         &tze_out.predicate.payload,
                     )) {
-                        Ok(demo::Predicate::Close(p_close)) => {
+                        Ok(Predicate::Close(p_close)) => {
                             // Finally, check the predicate:
                             // predicate_open = BLAKE2b_256(witness_open || predicate_close)
                             let mut h = Params::new().hash_length(32).to_state();
@@ -77,26 +270,26 @@ impl<C: Context> Extension<C> for Program {
                             if hash.as_bytes() == p_open.0 {
                                 Ok(())
                             } else {
-                                Err(demo::Error::HashMismatch)
+                                Err(Error::HashMismatch)
                             }
                         }
-                        Ok(demo::Predicate::Open(_)) => Err(demo::Error::ExpectedClose),
+                        Ok(Predicate::Open(_)) => Err(Error::ExpectedClose),
                         Err(e) => Err(e),
                     },
-                    _ => Err(demo::Error::InvalidOutputQty(outputs.len())),
+                    _ => Err(Error::InvalidOutputQty(outputs.len())),
                 }
             }
-            (demo::Predicate::Close(p), demo::Witness::Close(w)) => {
+            (Predicate::Close(p), Witness::Close(w)) => {
                 // In CLOSE mode, we only require that the predicate is satisfied:
                 // predicate_close = BLAKE2b_256(witness_close)
                 let hash = Params::new().hash_length(32).hash(&w.0);
                 if hash.as_bytes() == p.0 {
                     Ok(())
                 } else {
-                    Err(demo::Error::HashMismatch)
+                    Err(Error::HashMismatch)
                 }
             }
-            _ => Err(demo::Error::ModeMismatch),
+            _ => Err(Error::ModeMismatch),
         }
     }
 }
@@ -104,14 +297,72 @@ impl<C: Context> Extension<C> for Program {
 #[cfg(test)]
 mod tests {
     use crate::{
+        consensus::extensions::transparent::demo,
         consensus::extensions::transparent::demo::{Context, Program},
-        extensions::transparent::{self as tze, demo, Extension},
+        extensions::transparent::{self as tze, Extension},
         transaction::{
             components::{Amount, OutPoint, TzeIn, TzeOut},
             Transaction, TransactionData,
         },
     };
     use blake2b_simd::Params;
+
+    use std::convert::TryInto;
+
+    use super::{close, open, Predicate, Witness};
+    use crate::extensions::transparent::ToPayload;
+
+    #[test]
+    fn predicate_open_round_trip() {
+        let data = vec![7; 32];
+        let p: Predicate = (open::MODE, &data[..]).try_into().unwrap();
+        assert_eq!(p, Predicate::Open(open::Predicate([7; 32])));
+        assert_eq!(p.to_payload(), (open::MODE, data));
+    }
+
+    #[test]
+    fn predicate_close_round_trip() {
+        let data = vec![7; 32];
+        let p: Predicate = (close::MODE, &data[..]).try_into().unwrap();
+        assert_eq!(p, Predicate::Close(close::Predicate([7; 32])));
+        assert_eq!(p.to_payload(), (close::MODE, data));
+    }
+
+    #[test]
+    fn predicate_rejects_invalid_mode_or_length() {
+        for mode in 0..3 {
+            for len in &[31, 33] {
+                let p: Result<Predicate, _> = (mode, &vec![7; *len]).try_into();
+                assert!(p.is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn witness_open_round_trip() {
+        let data = vec![7; 32];
+        let w: Witness = (open::MODE, &data[..]).try_into().unwrap();
+        assert_eq!(w, Witness::Open(open::Witness([7; 32])));
+        assert_eq!(w.to_payload(), (open::MODE, data));
+    }
+
+    #[test]
+    fn witness_close_round_trip() {
+        let data = vec![7; 32];
+        let p: Witness = (close::MODE, &data[..]).try_into().unwrap();
+        assert_eq!(p, Witness::Close(close::Witness([7; 32])));
+        assert_eq!(p.to_payload(), (close::MODE, data));
+    }
+
+    #[test]
+    fn witness_rejects_invalid_mode_or_length() {
+        for mode in 0..3 {
+            for len in &[31, 33] {
+                let p: Result<Witness, _> = (mode, &vec![7; *len]).try_into();
+                assert!(p.is_err());
+            }
+        }
+    }
 
     /// Dummy context
     pub struct Ctx<'a> {

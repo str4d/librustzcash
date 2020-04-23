@@ -5,7 +5,7 @@ use crate::transaction::Transaction;
 use crate::transaction::components::TzeOut;
 use std::convert::TryFrom;
 
-mod demo;
+pub mod demo;
 
 /// The set of programs that have assigned type IDs within the Zcash consensus rules.
 #[derive(Debug, Clone, Copy)]

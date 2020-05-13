@@ -13,7 +13,7 @@ use rand::{rngs::OsRng, seq::SliceRandom, CryptoRng, RngCore};
 use crate::{
     consensus,
     keys::OutgoingViewingKey,
-    extensions::transparent::{self as tze, ToPayload, Epoch},
+    extensions::transparent::{self as tze, ToPayload},
     legacy::TransparentAddress,
     merkle_tree::MerklePath,
     note_encryption::{generate_esk, Memo, SaplingNoteEncryption},
@@ -440,13 +440,11 @@ impl<R: RngCore + CryptoRng> Builder<R> {
     /// targeting. An invalid `consensus_branch_id` will *not* result in an error from
     /// this function, and instead will generate a transaction that will be rejected by
     /// the network.
-    pub fn build<A, Tzes>(
+    pub fn build(
         mut self,
         consensus_branch_id: consensus::BranchId,
         prover: &impl TxProver,
-        tzes: Tzes
-    ) -> Result<(Transaction, TransactionMetadata), Error> 
-    where Tzes: Epoch<A> {
+    ) -> Result<(Transaction, TransactionMetadata), Error>  {
         let mut tx_metadata = TransactionMetadata::new();
 
         //
@@ -696,12 +694,13 @@ impl<R: RngCore + CryptoRng> ExtensionTxBuilder for Builder<R> {
     fn add_tze_input<W: ToPayload>(
         &mut self, 
         extension_id: usize,
-        from_prevout: OutPoint,
+        from_prevout: (OutPoint, TzeOut),
         with_evidence: &W
     ) -> Result<(), Self::Error> {
         let (mode, payload) = with_evidence.to_payload();
+        self.tze_inputs_prevouts.push(from_prevout.1);
         self.mtx.tze_inputs.push(TzeIn {
-            prevout: from_prevout,
+            prevout: from_prevout.0,
             witness: tze::Witness { extension_id, mode, payload },
         });
 

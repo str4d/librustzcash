@@ -1,10 +1,7 @@
 //! Core traits and structs for Transparent Zcash Extensions.
 
 use std::fmt;
-// use crate::consensus::BranchId;
-// use crate::transaction::TransactionData;
-use crate::transaction::components::Amount;
-use crate::transaction::components::OutPoint;
+use crate::transaction::components::{Amount, OutPoint, TzeOut};
 
 pub trait FromPayload<E>: Sized {
     /// Parses an extension type from a mode and payload.
@@ -123,7 +120,7 @@ pub trait ExtensionTxBuilder {
     fn add_tze_input<W: ToPayload>(
         &mut self, 
         extension_id: usize,
-        from_prevout: OutPoint,
+        from_prevout: (OutPoint, TzeOut),
         with_evidence: &W
     ) -> Result<(), Self::Error>;
 

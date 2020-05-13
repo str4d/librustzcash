@@ -321,13 +321,14 @@ impl<'a, B: ExtensionTxBuilder> DemoBuilder<'a, B> {
 
     pub fn demo_transfer_to_close(
         &mut self, 
-        prevout: OutPoint, 
+        prevout: (OutPoint, TzeOut),
         transfer_amount: Amount,
         preimage_1: &[u8; 32], 
         preimage_2: &[u8; 32]
     ) -> Result<(), B::Error> {
         let (_, hash_2) = builder_hashes(preimage_1, preimage_2);
 
+        // should we eagerly validate the relationship between prevout.1 and preimage_1?
         self.txn_builder.add_tze_input(
             self.extension_id,
             prevout,
@@ -336,12 +337,12 @@ impl<'a, B: ExtensionTxBuilder> DemoBuilder<'a, B> {
 
         self.txn_builder.add_tze_output(
             self.extension_id, 
-            transfer_amount,
+            transfer_amount, // can this be > prevout.1.value?
             &Precondition::close(hash_2)
         )
     }
 
-    pub fn demo_close(&mut self, prevout: OutPoint, preimage: &[u8; 32]) -> Result<(), B::Error> {
+    pub fn demo_close(&mut self, prevout: (OutPoint, TzeOut), preimage: &[u8; 32]) -> Result<(), B::Error> {
         let hash_2 = {
             let mut hash = [0; 32];
             hash.copy_from_slice(Params::new().hash_length(32).hash(preimage).as_bytes());

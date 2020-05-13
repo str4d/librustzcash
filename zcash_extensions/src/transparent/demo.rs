@@ -21,9 +21,9 @@
 use blake2b_simd::Params;
 use std::convert::TryFrom;
 use std::fmt;
-use zcash_extensions_api::transparent::{Extension, FromPayload, ToPayload};
 
-use crate::transaction::components::TzeOut;
+use zcash_primitives::transaction::components::{OutPoint, TzeOut, amount::Amount};
+use zcash_primitives::extensions::transparent::{Extension, FromPayload, ToPayload, ExtensionTxBuilder};
 
 mod open {
     pub const MODE: usize = 0;
@@ -270,6 +270,89 @@ impl<C: Context> Extension<C> for Program {
             }
             _ => Err(Error::ModeMismatch),
         }
+    }
+}
+
+fn builder_hashes(preimage_1: &[u8; 32], preimage_2: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let hash_2 = {
+        let mut hash = [0; 32];
+        hash.copy_from_slice(Params::new().hash_length(32).hash(preimage_2).as_bytes());
+        hash
+    };
+
+    let hash_1 = {
+        let mut hash = [0; 32];
+        hash.copy_from_slice(
+            Params::new()
+                .hash_length(32)
+                .to_state()
+                .update(preimage_1)
+                .update(&hash_2)
+                .finalize()
+                .as_bytes(),
+        );
+        hash
+    };
+    
+    (hash_1, hash_2)
+}
+
+pub struct DemoBuilder<'a, B> { 
+    txn_builder: &'a mut B,
+    extension_id: usize,
+}
+
+impl<'a, B: ExtensionTxBuilder> DemoBuilder<'a, B> {
+    pub fn demo_open(
+        &mut self, 
+        value: Amount, 
+        preimage_1: &[u8; 32], 
+        preimage_2: &[u8; 32]
+    ) -> Result<(), B::Error> {
+        let (hash_1, _) = builder_hashes(preimage_1, preimage_2);
+
+        // Call through to the generic builder.
+        self.txn_builder.add_tze_output(
+            self.extension_id, 
+            value, 
+            &Precondition::open(hash_1),
+        )
+    }
+
+    pub fn demo_transfer_to_close(
+        &mut self, 
+        prevout: OutPoint, 
+        transfer_amount: Amount,
+        preimage_1: &[u8; 32], 
+        preimage_2: &[u8; 32]
+    ) -> Result<(), B::Error> {
+        let (_, hash_2) = builder_hashes(preimage_1, preimage_2);
+
+        self.txn_builder.add_tze_input(
+            self.extension_id,
+            prevout,
+            &Witness::open(*preimage_1)
+        )?;
+
+        self.txn_builder.add_tze_output(
+            self.extension_id, 
+            transfer_amount,
+            &Precondition::close(hash_2)
+        )
+    }
+
+    pub fn demo_close(&mut self, prevout: OutPoint, preimage: &[u8; 32]) -> Result<(), B::Error> {
+        let hash_2 = {
+            let mut hash = [0; 32];
+            hash.copy_from_slice(Params::new().hash_length(32).hash(preimage).as_bytes());
+            hash
+        };
+
+        self.txn_builder.add_tze_input(
+            self.extension_id,
+            prevout,
+            &Witness::close(hash_2)
+        )
     }
 }
 

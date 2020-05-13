@@ -5,8 +5,8 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use std::io::{self, Read, Write};
-use zcash_extensions_api::transparent as tze;
 
+use crate::extensions::transparent as tze;
 use crate::legacy::Script;
 use crate::redjubjub::{PublicKey, Signature};
 use crate::serialize::{CompactSize, Vector};
@@ -114,7 +114,7 @@ impl TxOut {
 #[derive(Debug)]
 pub struct TzeIn {
     pub prevout: OutPoint,
-    pub witness: Option<tze::Witness>,
+    pub witness: tze::Witness,
 }
 
 impl TzeIn {
@@ -127,27 +127,20 @@ impl TzeIn {
 
         Ok(TzeIn {
             prevout,
-            witness: Some(tze::Witness {
+            witness: tze::Witness {
                 extension_id,
                 mode,
                 payload,
-            }),
+            },
         })
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         self.prevout.write(&mut writer)?;
 
-        if let Some(witness) = self.witness {
-            CompactSize::write(&mut writer, witness.extension_id)?;
-            CompactSize::write(&mut writer, witness.mode)?;
-            Vector::write(&mut writer, &witness.payload, |w, b| w.write_u8(*b))
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Missing TZE witness",
-            ))
-        }
+        CompactSize::write(&mut writer, self.witness.extension_id)?;
+        CompactSize::write(&mut writer, self.witness.mode)?;
+        Vector::write(&mut writer, &self.witness.payload, |w, b| w.write_u8(*b))
     }
 }
 

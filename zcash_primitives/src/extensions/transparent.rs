@@ -14,7 +14,7 @@ pub trait ToPayload {
 }
 
 /// A condition that can be used to encumber transparent funds.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Precondition {
     pub extension_id: usize,
     pub mode: usize,
@@ -34,7 +34,7 @@ impl Precondition {
 
 /// Data that satisfies the precondition for prior encumbered funds, enabling them to be
 /// spent.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Witness {
     pub extension_id: usize,
     pub mode: usize,
@@ -107,6 +107,12 @@ pub trait Extension<C> {
     }
 }
 
+// pub trait WitnessBuilder<BuildCtx> {
+//     type Error;
+//     type Witness: ToPayload;
+// 
+//     fn build_witness(ctx: BuildCtx) -> Result<Witness, Self::Error>;
+// }
 
 // This extension trait is satisfied by the transaction::builder::Builder type. It provides a
 // minimal contract for interacting with the transaction builder, that extension library authors
@@ -114,27 +120,29 @@ pub trait Extension<C> {
 // transaction builder.  This may make it simpler for projects that include transaction-builder
 // functionality to integrate with third-party extensions without those extensions being coupled to
 // a particular transaction or builder representation.
-pub trait ExtensionTxBuilder {
-    type Error;
+pub trait ExtensionTxBuilder<'a> {
+    type BuildCtx;
+    type BuildError;
 
-    fn add_tze_input<W: ToPayload>(
+    fn add_tze_input<WBuilder, W: ToPayload>(
         &mut self, 
         extension_id: usize,
-        from_prevout: (OutPoint, TzeOut),
-        with_evidence: &W
-    ) -> Result<(), Self::Error>;
+        prevout: (OutPoint, TzeOut),
+        witness_builder: WBuilder
+    ) -> Result<(), Self::BuildError>
+    where WBuilder: 'a + (FnOnce(&Self::BuildCtx) -> Result<W, Self::BuildError>);
+    //where WBuilder: WitnessBuilder<Self::BuildCtx, Witness = W, Error = Self::BuildError>;
 
     fn add_tze_output<P: ToPayload>(
         &mut self,
         extension_id: usize,
         value: Amount,
         guarded_by: &P,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::BuildError>;
 }
 
-pub trait Epoch<Context> {
+pub trait Epoch<VerifyCtx> {
     type VerifyError;
-    type CommitError;
 
     // Implementation of this method should check that the provided witness
     // satisfies the specified precondition, given the context. This verification
@@ -143,23 +151,8 @@ pub trait Epoch<Context> {
         &self,
         precondition: &Precondition,
         witness: &Witness,
-        ctx: &Context
+        ctx: &VerifyCtx
     ) -> Result<(), Error<Self::VerifyError>>;
-
-    // Implementation of this method should delegate to extensions the ability
-    // to validate a transaction that is in the process of being constructed by
-    // a transaction builder. 
-    // fn check_transaction(
-    //     &self,
-    //     branch_id: &BranchId,
-    //     transactionData: &TransactionData
-    // ) -> Result<(), Error<Self::VerifyError>>;
-
-    // fn commit(
-    //     &self,
-    //     tzein: &TzeIn,
-    //     ctx: &Context
-    // ) -> Result(Witness, Error<Self::
 }
 
 

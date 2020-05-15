@@ -1,5 +1,6 @@
 //! Structs for building transactions.
 
+use std::boxed::Box;
 use crate::zip32::ExtendedSpendingKey;
 use crate::{
     jubjub::fs::Fs,
@@ -23,7 +24,7 @@ use crate::{
     transaction::{
         components::{
             amount::DEFAULT_FEE, amount::Amount, 
-            OutputDescription, SpendDescription, TxOut, TzeOut, TzeIn, OutPoint
+            OutputDescription, SpendDescription, TxOut, TzeIn, TzeOut, OutPoint
         },
         signature_hash_data, Transaction, TransactionData, SIGHASH_ALL,
     },
@@ -228,6 +229,7 @@ impl TransparentInputs {
                 consensus_branch_id,
                 SIGHASH_ALL,
                 Some((i, &info.coin.script_pubkey, info.coin.value)),
+                // tze equivalent is ???
             ));
 
             let msg = secp256k1::Message::from_slice(&sighash).expect("32 bytes");
@@ -244,6 +246,38 @@ impl TransparentInputs {
 
     #[cfg(not(feature = "transparent-inputs"))]
     fn apply_signatures(&self, _: &mut TransactionData, _: consensus::BranchId) {}
+}
+
+
+struct TzeInputInfo<'a, BuildCtx> {
+    prevout: TzeOut,
+    builder: Box<dyn FnOnce(&BuildCtx) -> Result<TzeIn, Error> + 'a>,
+}
+
+struct TzeInputs<'a, BuildCtx> {
+    builders: Vec<TzeInputInfo<'a, BuildCtx>>,
+}
+
+impl<'a, BuildCtx> TzeInputs<'a, BuildCtx> {
+    fn push<WBuilder, W: ToPayload>(
+            &mut self, 
+            extension_id: usize, 
+            prevout: (OutPoint, TzeOut), 
+            builder: WBuilder) 
+    where WBuilder: 'a + FnOnce(&BuildCtx) -> Result<W, Error> { 
+        let (outpoint, tzeout) = prevout;
+        self.builders.push(TzeInputInfo { 
+            prevout: tzeout, 
+            builder: Box::new(
+                move |ctx| {
+                    let (mode, payload) = builder(&ctx).map(|x| x.to_payload())?;
+                    Ok(TzeIn { 
+                        prevout: outpoint,
+                        witness: tze::Witness { extension_id, mode, payload }
+                    })
+                })
+        });
+    }
 }
 
 /// Metadata about a transaction created by a [`Builder`].
@@ -285,7 +319,7 @@ impl TransactionMetadata {
 }
 
 /// Generates a [`Transaction`] from its inputs and outputs.
-pub struct Builder<R: RngCore + CryptoRng> {
+pub struct Builder<'a, R: RngCore + CryptoRng> {
     rng: R,
     mtx: TransactionData,
     fee: Amount,
@@ -293,11 +327,11 @@ pub struct Builder<R: RngCore + CryptoRng> {
     spends: Vec<SpendDescriptionInfo>,
     outputs: Vec<SaplingOutput>,
     transparent_inputs: TransparentInputs,
-    tze_inputs_prevouts: Vec<TzeOut>,
+    tze_inputs: TzeInputs<'a, TransactionData>,
     change_address: Option<(OutgoingViewingKey, PaymentAddress<Bls12>)>,
 }
 
-impl Builder<OsRng> {
+impl Builder<'_, OsRng> {
     /// Creates a new `Builder` targeted for inclusion in the block with the given height,
     /// using default values for general transaction fields and the default OS random.
     ///
@@ -312,7 +346,7 @@ impl Builder<OsRng> {
     }
 }
 
-impl<R: RngCore + CryptoRng> Builder<R> {
+impl<'a, R: RngCore + CryptoRng> Builder<'a, R> {
     /// Creates a new `Builder` targeted for inclusion in the block with the given height
     /// and randomness source, using default values for general transaction fields.
     ///
@@ -322,7 +356,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
     /// expiry delta (20 blocks).
     ///
     /// The fee will be set to the default fee (0.0001 ZEC).
-    pub fn new_with_rng(height: u32, rng: R) -> Builder<R> {
+    pub fn new_with_rng(height: u32, rng: R) -> Builder<'a, R> {
         let mut mtx = TransactionData::new();
         mtx.expiry_height = height + DEFAULT_TX_EXPIRY_DELTA;
 
@@ -334,7 +368,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
             spends: vec![],
             outputs: vec![],
             transparent_inputs: TransparentInputs::default(),
-            tze_inputs_prevouts: vec![],
+            tze_inputs: TzeInputs { builders: vec![] },
             change_address: None,
         }
     }
@@ -444,6 +478,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
         mut self,
         consensus_branch_id: consensus::BranchId,
         prover: &impl TxProver,
+        // epoch: &Epoch<TransactionData>
     ) -> Result<(Transaction, TransactionMetadata), Error>  {
         let mut tx_metadata = TransactionMetadata::new();
 
@@ -457,7 +492,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
             - self.fee 
             + self.transparent_inputs.value_sum()
             - self.mtx.vout.iter().map(|vo| vo.value).sum::<Amount>()
-            + self.tze_inputs_prevouts.iter().map(|tzeo| tzeo.value).sum::<Amount>()
+            + self.tze_inputs.builders.iter().map(|ein| ein.prevout.value).sum::<Amount>()
             - self.mtx.tze_outputs.iter().map(|tzo| tzo.value).sum::<Amount>();
 
         if change.is_negative() {
@@ -631,11 +666,8 @@ impl<R: RngCore + CryptoRng> Builder<R> {
             self.mtx.shielded_outputs.push(output_desc);
         }
 
-        // TZE output contextual checks
-        // tzes.check_transaction(consensus_branch_id, &self.mtx)?;
-
         //
-        // Signatures
+        // Signatures -- all effects must have been applied.
         //
 
         let mut sighash = [0u8; 32];
@@ -663,17 +695,17 @@ impl<R: RngCore + CryptoRng> Builder<R> {
         );
 
         // // Create TZE input witnesses
-        // for tzein in self.mtx.tze_inputs.iter_mut() {
-        //     // Need to enable witness to commit to the amount.
-        //     // - So hardware wallets "know" the amount without having to be sent all the
-        //     //   prior TZE outputs to which this witness gives evidence.
-        //     //
-        //     // The witness is expected to commit to the precommitment internally?
-        //     // (Or make it part of the sighash?)
-        //     // - TODO: Check whether transparent inputs committing to script_pubkey was
-        //     //   only so that hardware wallets "knew" what address was being spent from.
-        //     tzein.witness = Some(tzes.commit(tzein, 
-        // }
+        for tze_in in self.tze_inputs.builders {
+            // Need to enable witness to commit to the amount.
+            // - So hardware wallets "know" the amount without having to be sent all the
+            //   prior TZE outputs to which this witness gives evidence.
+            //
+            // The witness is expected to commit to the precommitment internally?
+            // (Or make it part of the sighash?)
+            // - TODO: Check whether transparent inputs committing to script_pubkey was
+            //   only so that hardware wallets "knew" what address was being spent from.
+            self.mtx.tze_inputs.push((tze_in.builder)(&self.mtx)?);
+        }
 
         // Transparent signatures
         self.transparent_inputs
@@ -688,22 +720,19 @@ impl<R: RngCore + CryptoRng> Builder<R> {
 
 
 
-impl<R: RngCore + CryptoRng> ExtensionTxBuilder for Builder<R> {
-    type Error = Error;
+impl<'a, R: RngCore + CryptoRng> ExtensionTxBuilder<'a> for Builder<'a, R> {
+    type BuildCtx = TransactionData;
+    type BuildError = Error;
 
-    fn add_tze_input<W: ToPayload>(
+    fn add_tze_input<WBuilder, W: ToPayload>(
         &mut self, 
         extension_id: usize,
-        from_prevout: (OutPoint, TzeOut),
-        with_evidence: &W
-    ) -> Result<(), Self::Error> {
-        let (mode, payload) = with_evidence.to_payload();
-        self.tze_inputs_prevouts.push(from_prevout.1);
-        self.mtx.tze_inputs.push(TzeIn {
-            prevout: from_prevout.0,
-            witness: tze::Witness { extension_id, mode, payload },
-        });
-
+        prevout: (OutPoint, TzeOut),
+        witness_builder: WBuilder
+    ) -> Result<(), Self::BuildError> 
+    where WBuilder: 'a + (FnOnce(&Self::BuildCtx) -> Result<W, Self::BuildError>) { 
+    // where WBuilder: WitnessBuilder<Self::BuildCtx, Witness = impl ToPayload, Error = Self::BuildError> {
+        self.tze_inputs.push(extension_id, prevout, witness_builder);
         Ok(())
     }
 
@@ -712,7 +741,7 @@ impl<R: RngCore + CryptoRng> ExtensionTxBuilder for Builder<R> {
         extension_id: usize,
         value: Amount,
         guarded_by: &P
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::BuildError> {
         if value.is_negative() {
             return Err(Error::InvalidAmount);
         }

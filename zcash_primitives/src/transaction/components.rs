@@ -111,7 +111,7 @@ impl TxOut {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzeIn {
     pub prevout: OutPoint,
     pub witness: tze::Witness,
@@ -144,7 +144,7 @@ impl TzeIn {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzeOut {
     pub value: Amount,
     pub precondition: tze::Precondition,

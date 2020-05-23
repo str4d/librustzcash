@@ -4,7 +4,7 @@ use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::Bls12;
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
 use std::path::Path;
-use zcash_client_backend::encoding::encode_extended_full_viewing_key;
+use zcash_client_backend::{address::RecipientAddress, encoding::encode_extended_full_viewing_key};
 use zcash_primitives::{
     consensus,
     jubjub::fs::{Fs, FsRepr},
@@ -22,7 +22,6 @@ use zcash_primitives::{
 };
 
 use crate::{
-    address::RecipientAddress,
     error::{Error, ErrorKind},
     get_target_and_anchor_heights, HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY,
 };

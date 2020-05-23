@@ -1,19 +1,20 @@
 //! Structs for handling supported address types.
 
 use pairing::bls12_381::Bls12;
-use zcash_client_backend::encoding::{
+use zcash_primitives::{legacy::TransparentAddress, primitives::PaymentAddress};
+
+use crate::encoding::{
     decode_payment_address, decode_transparent_address, encode_payment_address,
     encode_transparent_address,
 };
-use zcash_primitives::{legacy::TransparentAddress, primitives::PaymentAddress};
 
 #[cfg(feature = "mainnet")]
-use zcash_client_backend::constants::mainnet::{
+use crate::constants::mainnet::{
     B58_PUBKEY_ADDRESS_PREFIX, B58_SCRIPT_ADDRESS_PREFIX, HRP_SAPLING_PAYMENT_ADDRESS,
 };
 
 #[cfg(not(feature = "mainnet"))]
-use zcash_client_backend::constants::testnet::{
+use crate::constants::testnet::{
     B58_PUBKEY_ADDRESS_PREFIX, B58_SCRIPT_ADDRESS_PREFIX, HRP_SAPLING_PAYMENT_ADDRESS,
 };
 

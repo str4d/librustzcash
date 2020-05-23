@@ -28,5 +28,8 @@ protobuf-codegen-pure = "2"
 rand_core = "0.5"
 rand_xorshift = "0.2"
 
+[features]
+mainnet = []
+
 [badges]
 maintenance = { status = "actively-developed" }

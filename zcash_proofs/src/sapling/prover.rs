@@ -35,6 +35,20 @@ impl SaplingProvingContext {
         }
     }
 
+    /// Construct a context from the given parts.
+    ///
+    /// TODO: Replace this with a safer API.
+    pub fn from_parts(bsk: Fs, cv_sum: edwards::Point<Bls12, Unknown>) -> Self {
+        SaplingProvingContext { bsk, cv_sum }
+    }
+
+    /// Split this context into its inner parts.
+    ///
+    /// TODO: Replace this with a safer API.
+    pub fn into_parts(self) -> (Fs, edwards::Point<Bls12, Unknown>) {
+        (self.bsk, self.cv_sum)
+    }
+
     /// Create the value commitment, re-randomized key, and proof for a Sapling
     /// SpendDescription, while accumulating its value commitment randomness
     /// inside the context for later use.

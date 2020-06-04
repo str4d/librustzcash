@@ -25,7 +25,7 @@ impl Parameters for MainNetwork {
             NetworkUpgrade::Overwinter => Some(347_500),
             NetworkUpgrade::Sapling => Some(419_200),
             NetworkUpgrade::Blossom => Some(653_600),
-            NetworkUpgrade::Heartwood => None,
+            NetworkUpgrade::Heartwood => Some(903_000),
         }
     }
 }
@@ -40,7 +40,7 @@ impl Parameters for TestNetwork {
             NetworkUpgrade::Overwinter => Some(207_500),
             NetworkUpgrade::Sapling => Some(280_000),
             NetworkUpgrade::Blossom => Some(584_000),
-            NetworkUpgrade::Heartwood => None,
+            NetworkUpgrade::Heartwood => Some(903_800),
         }
     }
 }

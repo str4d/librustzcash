@@ -333,12 +333,19 @@ pub fn is_valid_solution(
 mod tests {
     use super::is_valid_solution_iterative;
     use super::is_valid_solution_recursive;
+    use super::Error;
 
-    fn is_valid_solution(n: u32, k: u32, input: &[u8], nonce: &[u8], indices: &[u32]) -> bool {
-        let a = is_valid_solution_iterative(n, k, input, nonce, indices);
-        let b = is_valid_solution_recursive(n, k, input, nonce, indices);
-        assert!(a == b);
-        a
+    fn is_valid_solution(
+        n: u32,
+        k: u32,
+        input: &[u8],
+        nonce: &[u8],
+        indices: &[u32],
+    ) -> Result<(), Error> {
+        let a = is_valid_solution_iterative(n, k, input, nonce, indices)?;
+        let b = is_valid_solution_recursive(n, k, input, nonce, indices)?;
+
+        Ok(())
     }
 
     #[test]
@@ -350,14 +357,14 @@ mod tests {
             25557, 92292, 38525, 56514, 1110, 98024, 15426, 74455, 3185, 84007, 24328, 36473,
             17427, 129451, 27556, 119967, 31704, 62448, 110460, 117894,
         ];
-        assert!(is_valid_solution(96, 5, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap();
 
         indices = vec![
             1008, 18280, 34711, 57439, 3903, 104059, 81195, 95931, 58336, 118687, 67931, 123026,
             64235, 95595, 84355, 122946, 8131, 88988, 45130, 58986, 59899, 78278, 94769, 118158,
             25569, 106598, 44224, 96285, 54009, 67246, 85039, 127667,
         ];
-        assert!(is_valid_solution(96, 5, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap();
 
         indices = vec![
             4313, 223176, 448870, 1692641, 214911, 551567, 1696002, 1768726, 500589, 938660,
@@ -413,19 +420,19 @@ mod tests {
             981619, 683206, 1485056, 766481, 2047708, 930443, 2040726, 1136227, 1945705, 1722044,
             1971986,
         ];
-        assert!(!is_valid_solution(96, 5, input, &nonce, &indices));
-        assert!(is_valid_solution(200, 9, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap_err();
+        is_valid_solution(200, 9, input, &nonce, &indices).unwrap();
 
         nonce[0] = 1;
-        assert!(!is_valid_solution(96, 5, input, &nonce, &indices));
-        assert!(!is_valid_solution(200, 9, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap_err();
+        is_valid_solution(200, 9, input, &nonce, &indices).unwrap_err();
 
         indices = vec![
             1911, 96020, 94086, 96830, 7895, 51522, 56142, 62444, 15441, 100732, 48983, 64776,
             27781, 85932, 101138, 114362, 4497, 14199, 36249, 41817, 23995, 93888, 35798, 96337,
             5530, 82377, 66438, 85247, 39332, 78978, 83015, 123505,
         ];
-        assert!(is_valid_solution(96, 5, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap();
 
         indices = vec![
             1505, 1380774, 200806, 1787044, 101056, 1697952, 281464, 374899, 263712, 1532496,
@@ -481,8 +488,8 @@ mod tests {
             1644978, 278248, 2024807, 297914, 419798, 555747, 712605, 1012424, 1428921, 890113,
             1822645, 1082368, 1392894,
         ];
-        assert!(!is_valid_solution(96, 5, input, &nonce, &indices));
-        assert!(is_valid_solution(200, 9, input, &nonce, &indices));
+        is_valid_solution(96, 5, input, &nonce, &indices).unwrap_err();
+        is_valid_solution(200, 9, input, &nonce, &indices).unwrap();
 
         let input2 = b"Equihash is an asymmetric PoW based on the Generalised Birthday problem.";
         indices = vec![
@@ -490,6 +497,6 @@ mod tests {
             45858, 116805, 92842, 111026, 15972, 115059, 85191, 90330, 68190, 122819, 81830, 91132,
             23460, 49807, 52426, 80391, 69567, 114474, 104973, 122568,
         ];
-        assert!(is_valid_solution(96, 5, input2, &nonce, &indices));
+        is_valid_solution(96, 5, input2, &nonce, &indices).unwrap();
     }
 }

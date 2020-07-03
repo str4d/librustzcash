@@ -344,8 +344,8 @@ mod tests {
         nonce: &[u8],
         indices: &[u32],
     ) -> Result<(), Error> {
-        let a = is_valid_solution_iterative(n, k, input, nonce, indices)?;
-        let b = is_valid_solution_recursive(n, k, input, nonce, indices)?;
+        is_valid_solution_iterative(n, k, input, nonce, indices)?;
+        is_valid_solution_recursive(n, k, input, nonce, indices)?;
 
         Ok(())
     }

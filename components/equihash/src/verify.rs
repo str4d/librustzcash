@@ -114,6 +114,7 @@ enum Kind {
     Collision,
     OutOfOrder,
     DuplicateIdxs,
+    NonZeroRootHash,
 }
 
 impl fmt::Display for Kind {
@@ -122,6 +123,7 @@ impl fmt::Display for Kind {
             Kind::Collision => f.write_str("invalid collision length between StepRows"),
             Kind::OutOfOrder => f.write_str("Index tree incorrectly ordered"),
             Kind::DuplicateIdxs => f.write_str("duplicate indices"),
+            Kind::NonZeroRootHash => f.write_str("root hash of tree is non-zero"),
         }
     }
 }
@@ -275,7 +277,7 @@ pub fn is_valid_solution_iterative(
     if rows[0].is_zero(hash_len) {
         Ok(())
     } else {
-        unimplemented!()
+        Err(Error(Kind::NonZeroRootHash))
     }
 }
 
@@ -311,7 +313,7 @@ pub fn is_valid_solution_recursive(
     if root.is_zero(p.collision_byte_length()) {
         Ok(())
     } else {
-        unimplemented!()
+        Err(Error(Kind::NonZeroRootHash))
     }
 }
 

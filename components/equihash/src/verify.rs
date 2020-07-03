@@ -4,7 +4,7 @@
 
 use blake2b_simd::{Hash as Blake2bHash, Params as Blake2bParams, State as Blake2bState};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
-use log::error;
+use std::fmt;
 use std::io::Cursor;
 use std::mem::size_of;
 
@@ -95,6 +95,34 @@ impl Node {
 
     fn is_zero(&self, len: usize) -> bool {
         self.hash.iter().take(len).all(|v| *v == 0)
+    }
+}
+
+#[derive(Debug)]
+pub struct Error(Kind);
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid solution: {}", self.0)
+    }
+}
+
+impl std::error::Error for Error {}
+
+#[derive(Debug)]
+enum Kind {
+    Collision,
+    OutOfOrder,
+    DuplicateIdxs,
+}
+
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Kind::Collision => f.write_str("invalid collision length between StepRows"),
+            Kind::OutOfOrder => f.write_str("Index tree incorrectly ordered"),
+            Kind::DuplicateIdxs => f.write_str("duplicate indices"),
+        }
     }
 }
 
@@ -199,18 +227,15 @@ fn distinct_indices(a: &Node, b: &Node) -> bool {
     true
 }
 
-fn validate_subtrees(p: &Params, a: &Node, b: &Node) -> bool {
+fn validate_subtrees(p: &Params, a: &Node, b: &Node) -> Result<(), Kind> {
     if !has_collision(a, b, p.collision_byte_length()) {
-        error!("Invalid solution: invalid collision length between StepRows");
-        false
+        Err(Kind::Collision)
     } else if b.indices_before(a) {
-        error!("Invalid solution: Index tree incorrectly ordered");
-        false
+        Err(Kind::OutOfOrder)
     } else if !distinct_indices(a, b) {
-        error!("Invalid solution: duplicate indices");
-        false
+        Err(Kind::DuplicateIdxs)
     } else {
-        true
+        Ok(())
     }
 }
 
@@ -220,7 +245,7 @@ pub fn is_valid_solution_iterative(
     input: &[u8],
     nonce: &[u8],
     indices: &[u32],
-) -> bool {
+) -> Result<(), Error> {
     let p = Params { n, k };
 
     let mut state = initialise_state(p.n, p.k, p.hash_output());
@@ -238,9 +263,7 @@ pub fn is_valid_solution_iterative(
         for pair in rows.chunks(2) {
             let a = &pair[0];
             let b = &pair[1];
-            if !validate_subtrees(&p, a, b) {
-                return false;
-            }
+            validate_subtrees(&p, a, b).map_err(Error)?;
             cur_rows.push(Node::from_children_ref(a, b, p.collision_byte_length()));
         }
         rows = cur_rows;
@@ -248,28 +271,24 @@ pub fn is_valid_solution_iterative(
     }
 
     assert!(rows.len() == 1);
-    rows[0].is_zero(hash_len)
+
+    if rows[0].is_zero(hash_len) {
+        Ok(())
+    } else {
+        unimplemented!()
+    }
 }
 
-fn tree_validator(p: &Params, state: &Blake2bState, indices: &[u32]) -> Option<Node> {
+fn tree_validator(p: &Params, state: &Blake2bState, indices: &[u32]) -> Result<Node, Error> {
     if indices.len() > 1 {
         let end = indices.len();
         let mid = end / 2;
-        match (
-            tree_validator(p, state, &indices[0..mid]),
-            tree_validator(p, state, &indices[mid..end]),
-        ) {
-            (Some(a), Some(b)) => {
-                if validate_subtrees(p, &a, &b) {
-                    Some(Node::from_children(a, b, p.collision_byte_length()))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        let a = tree_validator(p, state, &indices[0..mid])?;
+        let b = tree_validator(p, state, &indices[mid..end])?;
+        validate_subtrees(p, &a, &b).map_err(Error)?;
+        Ok(Node::from_children(a, b, p.collision_byte_length()))
     } else {
-        Some(Node::new(&p, &state, indices[0]))
+        Ok(Node::new(&p, &state, indices[0]))
     }
 }
 
@@ -279,23 +298,30 @@ pub fn is_valid_solution_recursive(
     input: &[u8],
     nonce: &[u8],
     indices: &[u32],
-) -> bool {
+) -> Result<(), Error> {
     let p = Params { n, k };
 
     let mut state = initialise_state(p.n, p.k, p.hash_output());
     state.update(input);
     state.update(nonce);
 
-    match tree_validator(&p, &state, indices) {
-        Some(root) => {
-            // Hashes were trimmed, so only need to check remaining length
-            root.is_zero(p.collision_byte_length())
-        }
-        None => false,
+    let root = tree_validator(&p, &state, indices)?;
+
+    // Hashes were trimmed, so only need to check remaining length
+    if root.is_zero(p.collision_byte_length()) {
+        Ok(())
+    } else {
+        unimplemented!()
     }
 }
 
-pub fn is_valid_solution(n: u32, k: u32, input: &[u8], nonce: &[u8], soln: &[u8]) -> bool {
+pub fn is_valid_solution(
+    n: u32,
+    k: u32,
+    input: &[u8],
+    nonce: &[u8],
+    soln: &[u8],
+) -> Result<(), Error> {
     let p = Params { n, k };
     let indices = indices_from_minimal(soln, p.collision_bit_length());
 

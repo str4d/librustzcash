@@ -7,6 +7,7 @@
 #![deny(intra_doc_link_resolution_failure)]
 
 pub mod address;
+pub mod api;
 pub mod constants;
 mod decrypt;
 pub mod encoding;

@@ -42,6 +42,7 @@ use zcash_client_backend::constants::testnet::{
 pub mod chain;
 pub mod error;
 pub mod init;
+pub mod persistence;
 pub mod query;
 pub mod scan;
 pub mod transact;

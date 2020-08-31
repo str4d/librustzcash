@@ -154,7 +154,7 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<G::Scalar>>,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
@@ -181,21 +181,22 @@ where
             // Create space for the buckets
             let mut buckets = vec![G::identity(); (1 << c) - 1];
 
-            let one = G::Scalar::one();
+            let zero = G::Scalar::zero().to_repr();
+            let one = G::Scalar::one().to_repr();
 
             // Sort the bases into buckets
-            for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+            for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
                 if density {
-                    if exp.is_zero() {
+                    if exp.as_ref() == zero.as_ref() {
                         bases.skip(1)?;
-                    } else if exp == one {
+                    } else if exp.as_ref() == one.as_ref() {
                         if handle_trivial {
                             acc.add_assign_from_source(&mut bases)?;
                         } else {
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp.to_repr();
+                        let mut exp = exp.clone();
                         <G::Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
 
                         let exp = exp
@@ -269,7 +270,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<G::Scalar>>,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
 ) -> Box<dyn Future<Item = G, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -324,6 +325,7 @@ fn test_with_bls12() {
             .map(|_| Scalar::random(rng))
             .collect::<Vec<_>>(),
     );
+    let v_repr = Arc::new(v.iter().map(|s| s.to_repr()).collect::<Vec<_>>());
     let g = Arc::new(
         (0..SAMPLES)
             .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())
@@ -334,7 +336,7 @@ fn test_with_bls12() {
 
     let pool = Worker::new();
 
-    let fast = multiexp(&pool, (g, 0), FullDensity, v).wait().unwrap();
+    let fast = multiexp(&pool, (g, 0), FullDensity, v_repr).wait().unwrap();
 
     assert_eq!(naive, fast);
 }

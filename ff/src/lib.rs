@@ -123,7 +123,14 @@ impl Endianness for byteorder::LittleEndian {
 pub trait PrimeField: Field + From<u64> {
     /// The prime field can be converted back and forth into this binary
     /// representation.
-    type Repr: Default + AsRef<[u8]> + AsMut<[u8]> + From<Self> + for<'r> From<&'r Self>;
+    type Repr: Clone
+        + Default
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + From<Self>
+        + for<'r> From<&'r Self>
+        + Send
+        + Sync;
 
     /// This indicates the endianness of [`PrimeField::Repr`].
     type ReprEndianness: Endianness;

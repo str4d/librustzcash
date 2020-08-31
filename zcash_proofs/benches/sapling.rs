@@ -1,23 +1,25 @@
+#[macro_use]
+extern crate criterion;
+
 use bellman::groth16::*;
+use criterion::Criterion;
 use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
 use rand_core::{RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use std::time::{Duration, Instant};
 use zcash_primitives::jubjub::{edwards, fs, JubjubBls12};
 use zcash_primitives::primitives::{Diversifier, ProofGenerationKey, ValueCommitment};
 use zcash_proofs::circuit::sapling::Spend;
 
 const TREE_DEPTH: usize = 32;
 
-fn main() {
+fn criterion_benchmark(c: &mut Criterion) {
     let jubjub_params = &JubjubBls12::new();
     let rng = &mut XorShiftRng::from_seed([
         0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
         0xe5,
     ]);
 
-    println!("Creating sample parameters...");
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         Spend::<Bls12> {
             params: jubjub_params,
@@ -33,10 +35,7 @@ fn main() {
     )
     .unwrap();
 
-    const SAMPLES: u32 = 50;
-
-    let mut total_time = Duration::new(0, 0);
-    for _ in 0..SAMPLES {
+    c.bench_function("sapling", |b| {
         let value_commitment = ValueCommitment::<Bls12> {
             value: 1,
             randomness: fs::Fs::random(rng),
@@ -72,26 +71,27 @@ fn main() {
         let ar = fs::Fs::random(rng);
         let anchor = Fr::random(rng);
 
-        let start = Instant::now();
-        let _ = create_random_proof(
-            Spend {
-                params: jubjub_params,
-                value_commitment: Some(value_commitment),
-                proof_generation_key: Some(proof_generation_key),
-                payment_address: Some(payment_address),
-                commitment_randomness: Some(commitment_randomness),
-                ar: Some(ar),
-                auth_path: auth_path,
-                anchor: Some(anchor),
-            },
-            &groth_params,
-            rng,
-        )
-        .unwrap();
-        total_time += start.elapsed();
-    }
-    let avg = total_time / SAMPLES;
-    let avg = avg.subsec_nanos() as f64 / 1_000_000_000f64 + (avg.as_secs() as f64);
-
-    println!("Average proving time (in seconds): {}", avg);
+        b.iter(|| {
+            create_random_proof(
+                Spend {
+                    params: jubjub_params,
+                    value_commitment: Some(value_commitment.clone()),
+                    proof_generation_key: Some(proof_generation_key.clone()),
+                    payment_address: Some(payment_address.clone()),
+                    commitment_randomness: Some(commitment_randomness),
+                    ar: Some(ar),
+                    auth_path: auth_path.clone(),
+                    anchor: Some(anchor),
+                },
+                &groth_params,
+                rng,
+            )
+        });
+    });
 }
+
+criterion_group!(
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = criterion_benchmark);
+criterion_main!(benches);

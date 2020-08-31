@@ -199,15 +199,17 @@ where
                         let mut exp = exp.clone();
                         <G::Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
 
+                        use bitvec::prelude as bv;
+                        use bitvec::slice::AsBits;
+
                         let exp = exp
                             .as_ref()
-                            .into_iter()
-                            .map(|b| (0..8).map(move |i| (b >> i) & 1u8))
-                            .flatten()
+                            .bits::<bv::Lsb0>()
+                            .iter()
                             .skip(skip as usize)
                             .take(c as usize)
                             .enumerate()
-                            .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
+                            .fold(0u64, |acc, (i, b)| acc + ((*b as u64) << i));
 
                         if exp != 0 {
                             (&mut buckets[(exp - 1) as usize])

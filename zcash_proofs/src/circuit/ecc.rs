@@ -620,7 +620,7 @@ impl MontgomeryPoint {
 #[cfg(test)]
 mod test {
     use bellman::ConstraintSystem;
-    use ff::{BitIterator, Field, PrimeField};
+    use ff::{Field, PrimeField, ScalarBits};
     use group::{Curve, Group};
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -734,12 +734,12 @@ mod test {
             let q = jubjub::ExtendedPoint::from(p * s).to_affine();
             let (u1, v1) = (q.get_u(), q.get_v());
 
-            let mut s_bits = BitIterator::<u8, _>::new(s.to_repr()).collect::<Vec<_>>();
-            s_bits.reverse();
-            s_bits.truncate(jubjub::Fr::NUM_BITS as usize);
-
-            let s_bits = s_bits
+            let s_bits = s
+                .to_repr_bits()
+                .as_le_bits()
                 .into_iter()
+                .take(jubjub::Fr::NUM_BITS as usize)
+                .cloned()
                 .enumerate()
                 .map(|(i, b)| {
                     AllocatedBit::alloc(cs.namespace(|| format!("scalar bit {}", i)), Some(b))
@@ -786,12 +786,12 @@ mod test {
                 v: num_v0,
             };
 
-            let mut s_bits = BitIterator::<u8, _>::new(s.to_repr()).collect::<Vec<_>>();
-            s_bits.reverse();
-            s_bits.truncate(jubjub::Fr::NUM_BITS as usize);
-
-            let s_bits = s_bits
+            let s_bits = s
+                .to_repr_bits()
+                .as_le_bits()
                 .into_iter()
+                .take(jubjub::Fr::NUM_BITS as usize)
+                .cloned()
                 .enumerate()
                 .map(|(i, b)| {
                     AllocatedBit::alloc(cs.namespace(|| format!("scalar bit {}", i)), Some(b))

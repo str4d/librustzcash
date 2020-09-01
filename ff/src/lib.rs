@@ -12,6 +12,7 @@ extern crate std;
 #[cfg(feature = "derive")]
 pub use ff_derive::*;
 
+use bitvec::prelude::*;
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
 use core::fmt;
@@ -98,6 +99,10 @@ pub trait Field:
     }
 }
 
+pub trait ScalarBits {
+    fn as_le_bits(&self) -> &BitSlice<Lsb0, u8>;
+}
+
 /// Helper trait for converting the binary representation of a prime field element into a
 /// specific endianness. This is useful when you need to act on the bit representation
 /// of an element generically, as the native binary representation of a prime field is
@@ -131,6 +136,9 @@ pub trait PrimeField: Field + From<u64> {
         + for<'r> From<&'r Self>
         + Send
         + Sync;
+
+    /// A bit representation of a prime field element.
+    type ReprBits: ScalarBits;
 
     /// This indicates the endianness of [`PrimeField::Repr`].
     type ReprEndianness: Endianness;
@@ -190,6 +198,9 @@ pub trait PrimeField: Field + From<u64> {
     /// [`PrimeField::ReprEndianness`].
     fn to_repr(&self) -> Self::Repr;
 
+    /// Converts an element of the prime field into a sequence of bits.
+    fn to_repr_bits(&self) -> Self::ReprBits;
+
     /// Returns true iff this element is odd.
     fn is_odd(&self) -> bool;
 
@@ -201,6 +212,9 @@ pub trait PrimeField: Field + From<u64> {
 
     /// Returns the field characteristic; the modulus.
     fn char() -> Self::Repr;
+
+    /// Returns the field characteristic; the modulus.
+    fn char_bits() -> Self::ReprBits;
 
     /// How many bits are needed to represent an element of this field.
     const NUM_BITS: u32;
@@ -220,74 +234,13 @@ pub trait PrimeField: Field + From<u64> {
     fn root_of_unity() -> Self;
 }
 
-/// Takes a little-endian representation of some value, and returns its bits in big-endian
-/// order.
-#[derive(Debug)]
-pub struct BitIterator<T, E: AsRef<[T]>> {
-    t: E,
-    n: usize,
-    _limb: PhantomData<T>,
-}
-
-impl<E: AsRef<[u64]>> BitIterator<u64, E> {
-    pub fn new(t: E) -> Self {
-        let n = t.as_ref().len() * 64;
-
-        BitIterator {
-            t,
-            n,
-            _limb: PhantomData::default(),
-        }
-    }
-}
-
-impl<E: AsRef<[u64]>> Iterator for BitIterator<u64, E> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<bool> {
-        if self.n == 0 {
-            None
-        } else {
-            self.n -= 1;
-            let part = self.n / 64;
-            let bit = self.n - (64 * part);
-
-            Some(self.t.as_ref()[part] & (1 << bit) > 0)
-        }
-    }
-}
-
-impl<E: AsRef<[u8]>> BitIterator<u8, E> {
-    pub fn new(t: E) -> Self {
-        let n = t.as_ref().len() * 8;
-
-        BitIterator {
-            t,
-            n,
-            _limb: PhantomData::default(),
-        }
-    }
-}
-
-impl<E: AsRef<[u8]>> Iterator for BitIterator<u8, E> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<bool> {
-        if self.n == 0 {
-            None
-        } else {
-            self.n -= 1;
-            let part = self.n / 8;
-            let bit = self.n - (8 * part);
-
-            Some(self.t.as_ref()[part] & (1 << bit) > 0)
-        }
-    }
-}
-
 #[test]
 fn test_bit_iterator() {
-    let mut a = BitIterator::<u64, _>::new([0xa953_d79b_83f6_ab59, 0x6dea_2059_e200_bd39]);
+    let mut a = [0xa953_d79b_83f6_ab59u64, 0x6dea_2059_e200_bd39]
+        .bits::<Lsb0>()
+        .into_iter()
+        .rev()
+        .cloned();
     let expected = "01101101111010100010000001011001111000100000000010111101001110011010100101010011110101111001101110000011111101101010101101011001";
 
     for e in expected.chars() {
@@ -298,12 +251,16 @@ fn test_bit_iterator() {
 
     let expected = "1010010101111110101010000101101011101000011101110101001000011001100100100011011010001011011011010001011011101100110100111011010010110001000011110100110001100110011101101000101100011100100100100100001010011101010111110011101011000011101000111011011101011001";
 
-    let mut a = BitIterator::<u64, _>::new([
-        0x429d_5f3a_c3a3_b759,
+    let mut a = [
+        0x429d_5f3a_c3a3_b759u64,
         0xb10f_4c66_768b_1c92,
         0x9236_8b6d_16ec_d3b4,
         0xa57e_a85a_e877_5219,
-    ]);
+    ]
+    .bits::<Lsb0>()
+    .into_iter()
+    .rev()
+    .cloned();
 
     for e in expected.chars() {
         assert!(a.next().unwrap() == (e == '1'));

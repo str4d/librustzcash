@@ -286,8 +286,21 @@ impl Default for FrRepr {
     }
 }
 
+#[derive(Debug)]
+pub struct FrBits {
+    le_bytes: [u8; 8],
+}
+
+impl ff::ScalarBits for FrBits {
+    fn as_le_bits(&self) -> &bitvec::slice::BitSlice<bitvec::order::Lsb0, u8> {
+        use bitvec::slice::AsBits;
+        self.le_bytes.bits()
+    }
+}
+
 impl PrimeField for Fr {
     type Repr = FrRepr;
+    type ReprBits = FrBits;
     type ReprEndianness = byteorder::LittleEndian;
 
     const NUM_BITS: u32 = 16;
@@ -305,6 +318,12 @@ impl PrimeField for Fr {
 
     fn to_repr(&self) -> FrRepr {
         FrRepr::from(*self)
+    }
+
+    fn to_repr_bits(&self) -> Self::ReprBits {
+        FrBits {
+            le_bytes: self.to_repr().0,
+        }
     }
 
     fn is_odd(&self) -> bool {

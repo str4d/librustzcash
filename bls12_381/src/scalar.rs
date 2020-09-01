@@ -650,6 +650,18 @@ impl<'a> From<&'a Scalar> for [u8; 32] {
     }
 }
 
+#[derive(Debug)]
+pub struct ScalarBits {
+    le_bytes: [u8; 32],
+}
+
+impl ff::ScalarBits for ScalarBits {
+    fn as_le_bits(&self) -> &bitvec::slice::BitSlice<bitvec::order::Lsb0, u8> {
+        use bitvec::slice::AsBits;
+        self.le_bytes.bits()
+    }
+}
+
 impl Field for Scalar {
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         let mut buf = [0; 64];
@@ -690,6 +702,7 @@ impl Field for Scalar {
 
 impl PrimeField for Scalar {
     type Repr = [u8; 32];
+    type ReprBits = ScalarBits;
     type ReprEndianness = byteorder::LittleEndian;
 
     fn from_repr(r: Self::Repr) -> Option<Self> {
@@ -705,12 +718,24 @@ impl PrimeField for Scalar {
         self.to_bytes()
     }
 
+    fn to_repr_bits(&self) -> Self::ReprBits {
+        ScalarBits {
+            le_bytes: self.to_bytes(),
+        }
+    }
+
     fn is_odd(&self) -> bool {
         self.to_bytes()[0] & 1 == 1
     }
 
     fn char() -> Self::Repr {
         MODULUS_BYTES
+    }
+
+    fn char_bits() -> Self::ReprBits {
+        ScalarBits {
+            le_bytes: MODULUS_BYTES,
+        }
     }
 
     const NUM_BITS: u32 = MODULUS_BITS;

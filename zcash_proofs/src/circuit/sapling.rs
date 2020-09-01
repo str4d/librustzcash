@@ -512,7 +512,7 @@ impl Circuit<bls12_381::Scalar> for Output {
 #[test]
 fn test_input_circuit_with_bls12_381() {
     use bellman::gadgets::test::*;
-    use ff::{BitIterator, Field};
+    use ff::{Field, ScalarBits};
     use group::Group;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -590,17 +590,20 @@ fn test_input_circuit_with_bls12_381() {
                     ::std::mem::swap(&mut lhs, &mut rhs);
                 }
 
-                let mut lhs: Vec<bool> = BitIterator::<u8, _>::new(lhs.to_repr()).collect();
-                let mut rhs: Vec<bool> = BitIterator::<u8, _>::new(rhs.to_repr()).collect();
-
-                lhs.reverse();
-                rhs.reverse();
+                let lhs = lhs.to_repr_bits();
+                let rhs = rhs.to_repr_bits();
 
                 cur = jubjub::ExtendedPoint::from(pedersen_hash::pedersen_hash(
                     pedersen_hash::Personalization::MerkleTree(i),
-                    lhs.into_iter()
+                    lhs.as_le_bits()
+                        .into_iter()
                         .take(bls12_381::Scalar::NUM_BITS as usize)
-                        .chain(rhs.into_iter().take(bls12_381::Scalar::NUM_BITS as usize)),
+                        .chain(
+                            rhs.as_le_bits()
+                                .into_iter()
+                                .take(bls12_381::Scalar::NUM_BITS as usize),
+                        )
+                        .cloned(),
                 ))
                 .to_affine()
                 .get_u();
@@ -660,7 +663,7 @@ fn test_input_circuit_with_bls12_381() {
 #[test]
 fn test_input_circuit_with_bls12_381_external_test_vectors() {
     use bellman::gadgets::test::*;
-    use ff::{BitIterator, Field};
+    use ff::{Field, ScalarBits};
     use group::Group;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -772,17 +775,20 @@ fn test_input_circuit_with_bls12_381_external_test_vectors() {
                     ::std::mem::swap(&mut lhs, &mut rhs);
                 }
 
-                let mut lhs: Vec<bool> = BitIterator::<u8, _>::new(lhs.to_repr()).collect();
-                let mut rhs: Vec<bool> = BitIterator::<u8, _>::new(rhs.to_repr()).collect();
-
-                lhs.reverse();
-                rhs.reverse();
+                let lhs = lhs.to_repr_bits();
+                let rhs = rhs.to_repr_bits();
 
                 cur = jubjub::ExtendedPoint::from(pedersen_hash::pedersen_hash(
                     pedersen_hash::Personalization::MerkleTree(i),
-                    lhs.into_iter()
+                    lhs.as_le_bits()
+                        .into_iter()
                         .take(bls12_381::Scalar::NUM_BITS as usize)
-                        .chain(rhs.into_iter().take(bls12_381::Scalar::NUM_BITS as usize)),
+                        .chain(
+                            rhs.as_le_bits()
+                                .into_iter()
+                                .take(bls12_381::Scalar::NUM_BITS as usize),
+                        )
+                        .cloned(),
                 ))
                 .to_affine()
                 .get_u();

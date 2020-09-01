@@ -23,6 +23,10 @@ name = "groups"
 harness = false
 required-features = ["groups"]
 
+[dependencies.bitvec]
+version = "0.17"
+default-features = false
+
 [dependencies.byteorder]
 version = "1"
 default-features = false

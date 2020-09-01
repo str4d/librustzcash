@@ -184,7 +184,7 @@ where
             // Sort the bases into buckets
             for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
                 if density {
-                    let exp_is_zero = exp.as_le_bits().any();
+                    let exp_is_zero = !exp.as_le_bits().any();
                     let exp_is_one = {
                         let (first, rest) = exp.as_le_bits().split_first().unwrap();
                         *first && !rest.any()

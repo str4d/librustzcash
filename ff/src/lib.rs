@@ -138,7 +138,7 @@ pub trait PrimeField: Field + From<u64> {
         + Sync;
 
     /// A bit representation of a prime field element.
-    type ReprBits: ScalarBits;
+    type ReprBits: ScalarBits + Send + Sync;
 
     /// This indicates the endianness of [`PrimeField::Repr`].
     type ReprEndianness: Endianness;

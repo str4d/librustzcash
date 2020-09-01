@@ -1,6 +1,6 @@
 use super::multicore::Worker;
 use bit_vec::{self, BitVec};
-use ff::{Endianness, Field, PrimeField};
+use ff::{PrimeField, ScalarBits};
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
@@ -154,7 +154,7 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::ReprBits>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
@@ -181,30 +181,26 @@ where
             // Create space for the buckets
             let mut buckets = vec![G::identity(); (1 << c) - 1];
 
-            let zero = G::Scalar::zero().to_repr();
-            let one = G::Scalar::one().to_repr();
-
             // Sort the bases into buckets
             for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
                 if density {
-                    if exp.as_ref() == zero.as_ref() {
+                    let exp_is_zero = exp.as_le_bits().any();
+                    let exp_is_one = {
+                        let (first, rest) = exp.as_le_bits().split_first().unwrap();
+                        *first && !rest.any()
+                    };
+
+                    if exp_is_zero {
                         bases.skip(1)?;
-                    } else if exp.as_ref() == one.as_ref() {
+                    } else if exp_is_one {
                         if handle_trivial {
                             acc.add_assign_from_source(&mut bases)?;
                         } else {
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp.clone();
-                        <G::Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
-
-                        use bitvec::prelude as bv;
-                        use bitvec::slice::AsBits;
-
                         let exp = exp
-                            .as_ref()
-                            .bits::<bv::Lsb0>()
+                            .as_le_bits()
                             .iter()
                             .skip(skip as usize)
                             .take(c as usize)
@@ -272,7 +268,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::ReprBits>>,
 ) -> Box<dyn Future<Item = G, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -315,6 +311,7 @@ fn test_with_bls12() {
     }
 
     use bls12_381::{Bls12, Scalar};
+    use ff::Field;
     use group::{Curve, Group};
     use pairing::Engine;
     use rand;
@@ -327,7 +324,7 @@ fn test_with_bls12() {
             .map(|_| Scalar::random(rng))
             .collect::<Vec<_>>(),
     );
-    let v_repr = Arc::new(v.iter().map(|s| s.to_repr()).collect::<Vec<_>>());
+    let v_repr = Arc::new(v.iter().map(|s| s.to_repr_bits()).collect::<Vec<_>>());
     let g = Arc::new(
         (0..SAMPLES)
             .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())

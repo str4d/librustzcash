@@ -334,6 +334,12 @@ impl PrimeField for Fr {
         Fr(MODULUS_R).into()
     }
 
+    fn char_bits() -> Self::ReprBits {
+        FrBits {
+            le_bytes: Self::char().0,
+        }
+    }
+
     fn multiplicative_generator() -> Fr {
         Fr(Wrapping(5))
     }

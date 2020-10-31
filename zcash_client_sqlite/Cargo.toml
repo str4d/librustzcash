@@ -29,5 +29,16 @@ rand_core = "0.5.1"
 tempfile = "3"
 zcash_proofs = { version = "0.4", path = "../zcash_proofs" }
 
+# zec_sqlite_cli dependencies
+tiny-bip39 = "0.7.3"
+futures = "0.3"
+grpc = "0.8"
+grpc-protobuf = "0.8"
+gumdrop = "0.8"
+hex = "0.4"
+httpbis = "0.9"
+tls-api = "0.4"
+tls-api-rustls = "0.4"
+
 [features]
 mainnet = []

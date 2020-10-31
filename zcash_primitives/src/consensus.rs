@@ -123,6 +123,9 @@ impl Sub for BlockHeight {
 
 /// Zcash consensus parameters.
 pub trait Parameters: Clone {
+    /// Returns the coin type for this network.
+    fn coin_type(&self) -> u32;
+
     /// Returns the activation height for a particular network upgrade,
     /// if an activation height has been set.
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight>;
@@ -157,6 +160,10 @@ pub struct MainNetwork;
 pub const MAIN_NETWORK: MainNetwork = MainNetwork;
 
 impl Parameters for MainNetwork {
+    fn coin_type(&self) -> u32 {
+        crate::constants::mainnet::COIN_TYPE
+    }
+
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
         match nu {
             NetworkUpgrade::Overwinter => Some(BlockHeight(347_500)),
@@ -192,6 +199,10 @@ pub struct TestNetwork;
 pub const TEST_NETWORK: TestNetwork = TestNetwork;
 
 impl Parameters for TestNetwork {
+    fn coin_type(&self) -> u32 {
+        crate::constants::testnet::COIN_TYPE
+    }
+
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
         match nu {
             NetworkUpgrade::Overwinter => Some(BlockHeight(207_500)),
@@ -227,6 +238,13 @@ pub enum Network {
 }
 
 impl Parameters for Network {
+    fn coin_type(&self) -> u32 {
+        match self {
+            Network::MainNetwork => MAIN_NETWORK.coin_type(),
+            Network::TestNetwork => TEST_NETWORK.coin_type(),
+        }
+    }
+
     fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
         match self {
             Network::MainNetwork => MAIN_NETWORK.activation_height(nu),

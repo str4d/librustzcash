@@ -32,6 +32,8 @@ zcash_primitives = { version = "0.4", path = "../zcash_primitives" }
 [dev-dependencies]
 criterion = "0.3"
 rand_xorshift = "0.2"
+zkinterface = "1.3.2"
+zkinterface_bellman = "1.3.2"
 
 [features]
 default = ["local-prover", "multicore"]

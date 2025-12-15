@@ -14,6 +14,8 @@ workspace.
 - `zcash_transparent::pczt`:
   - `Input::with_signable_input`
   - `Input::append_signature`
+- `zcash_transparent::zip48`:
+  - `FullViewingKey::derive_matching_account_priv_key`
 - `impl core::error::Error` for:
   -` zcash_transparent::builder::Error`
   - `zcash_transparent::coinbase::Error`

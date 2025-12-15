@@ -7282,6 +7282,7 @@ dependencies = [
  "document-features",
  "getset",
  "hex",
+ "nonempty",
  "proptest",
  "ripemd 0.1.3",
  "secp256k1",
